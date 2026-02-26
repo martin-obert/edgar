@@ -1,6 +1,6 @@
 $schemasPath = "./core/models"
 $flatcPath   = "./tools/flatc"
-$tsOutput    = "./frontend/edgars-face/generated"
+$tsOutput    = "./frontend/edgars-face/src/generated"
 $pyOutput    = "./backend/api/generated"
 
 Write-Host "=== FlatBuffers Compilation ===" -ForegroundColor Cyan
