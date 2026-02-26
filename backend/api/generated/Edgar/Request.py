@@ -49,8 +49,35 @@ class Request(object):
         o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(4))
         return o == 0
 
+    # Request
+    def Body(self, j):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(6))
+        if o != 0:
+            a = self._tab.Vector(o)
+            return self._tab.Get(flatbuffers.number_types.Int8Flags, a + flatbuffers.number_types.UOffsetTFlags.py_type(j * 1))
+        return 0
+
+    # Request
+    def BodyAsNumpy(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(6))
+        if o != 0:
+            return self._tab.GetVectorAsNumpy(flatbuffers.number_types.Int8Flags, o)
+        return 0
+
+    # Request
+    def BodyLength(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(6))
+        if o != 0:
+            return self._tab.VectorLen(o)
+        return 0
+
+    # Request
+    def BodyIsNone(self):
+        o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(6))
+        return o == 0
+
 def RequestStart(builder):
-    builder.StartObject(1)
+    builder.StartObject(2)
 
 def Start(builder):
     RequestStart(builder)
@@ -73,8 +100,110 @@ def RequestCreateHeadersVector(builder, data):
 def CreateHeadersVector(builder, data):
     RequestCreateHeadersVector(builder, data)
 
+def RequestAddBody(builder, body):
+    builder.PrependUOffsetTRelativeSlot(1, flatbuffers.number_types.UOffsetTFlags.py_type(body), 0)
+
+def AddBody(builder, body):
+    RequestAddBody(builder, body)
+
+def RequestStartBodyVector(builder, numElems):
+    return builder.StartVector(1, numElems, 1)
+
+def StartBodyVector(builder, numElems):
+    return RequestStartBodyVector(builder, numElems)
+
+def RequestCreateBodyVector(builder, data):
+    data = list(data)
+    builder.StartVector(1, len(data), 1)
+    for item in reversed(data):
+        builder.PrependInt8(item)
+    return builder.EndVector()
+
+def CreateBodyVector(builder, data):
+    RequestCreateBodyVector(builder, data)
+
 def RequestEnd(builder):
     return builder.EndObject()
 
 def End(builder):
     return RequestEnd(builder)
+
+import Edgar.HeaderValue
+try:
+    from typing import List
+except:
+    pass
+
+class RequestT(object):
+
+    # RequestT
+    def __init__(
+        self,
+        headers = None,
+        body = None,
+    ):
+        self.headers = headers  # type: Optional[List[Edgar.HeaderValue.HeaderValueT]]
+        self.body = body  # type: Optional[List[int]]
+
+    @classmethod
+    def InitFromBuf(cls, buf, pos):
+        request = Request()
+        request.Init(buf, pos)
+        return cls.InitFromObj(request)
+
+    @classmethod
+    def InitFromPackedBuf(cls, buf, pos=0):
+        n = flatbuffers.encode.Get(flatbuffers.packer.uoffset, buf, pos)
+        return cls.InitFromBuf(buf, pos+n)
+
+    @classmethod
+    def InitFromObj(cls, request):
+        x = RequestT()
+        x._UnPack(request)
+        return x
+
+    # RequestT
+    def _UnPack(self, request):
+        if request is None:
+            return
+        if not request.HeadersIsNone():
+            self.headers = []
+            for i in range(request.HeadersLength()):
+                if request.Headers(i) is None:
+                    self.headers.append(None)
+                else:
+                    headerValue_ = Edgar.HeaderValue.HeaderValueT.InitFromObj(request.Headers(i))
+                    self.headers.append(headerValue_)
+        if not request.BodyIsNone():
+            if np is None:
+                self.body = []
+                for i in range(request.BodyLength()):
+                    self.body.append(request.Body(i))
+            else:
+                self.body = request.BodyAsNumpy()
+
+    # RequestT
+    def Pack(self, builder):
+        if self.headers is not None:
+            headerslist = []
+            for i in range(len(self.headers)):
+                headerslist.append(self.headers[i].Pack(builder))
+            RequestStartHeadersVector(builder, len(self.headers))
+            for i in reversed(range(len(self.headers))):
+                builder.PrependUOffsetTRelative(headerslist[i])
+            headers = builder.EndVector()
+        if self.body is not None:
+            if np is not None and type(self.body) is np.ndarray:
+                body = builder.CreateNumpyVector(self.body)
+            else:
+                RequestStartBodyVector(builder, len(self.body))
+                for i in reversed(range(len(self.body))):
+                    builder.PrependByte(self.body[i])
+                body = builder.EndVector()
+        RequestStart(builder)
+        if self.headers is not None:
+            RequestAddHeaders(builder, headers)
+        if self.body is not None:
+            RequestAddBody(builder, body)
+        request = RequestEnd(builder)
+        return request

@@ -24,11 +24,11 @@ Get-ChildItem -Path $schemasPath -Filter "*.fbs" | ForEach-Object {
 
     Write-Host "[$name] " -ForegroundColor Yellow -NoNewline
     Write-Host "Compiling TypeScript..."
-    & $flatcPath --ts --ts-no-import-ext -o $tsOutput $_.FullName
+    & $flatcPath --ts --ts-no-import-ext --gen-object-api -o $tsOutput $_.FullName
 
     Write-Host "[$name] " -ForegroundColor Yellow -NoNewline
     Write-Host "Compiling Python..."
-    & $flatcPath --python -o $pyOutput $_.FullName
+    & $flatcPath --python --gen-object-api -o $pyOutput $_.FullName
 }
 
 Write-Host ""

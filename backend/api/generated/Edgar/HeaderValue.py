@@ -61,3 +61,53 @@ def HeaderValueEnd(builder):
 
 def End(builder):
     return HeaderValueEnd(builder)
+
+
+class HeaderValueT(object):
+
+    # HeaderValueT
+    def __init__(
+        self,
+        name = None,
+        value = None,
+    ):
+        self.name = name  # type: Optional[str]
+        self.value = value  # type: Optional[str]
+
+    @classmethod
+    def InitFromBuf(cls, buf, pos):
+        headerValue = HeaderValue()
+        headerValue.Init(buf, pos)
+        return cls.InitFromObj(headerValue)
+
+    @classmethod
+    def InitFromPackedBuf(cls, buf, pos=0):
+        n = flatbuffers.encode.Get(flatbuffers.packer.uoffset, buf, pos)
+        return cls.InitFromBuf(buf, pos+n)
+
+    @classmethod
+    def InitFromObj(cls, headerValue):
+        x = HeaderValueT()
+        x._UnPack(headerValue)
+        return x
+
+    # HeaderValueT
+    def _UnPack(self, headerValue):
+        if headerValue is None:
+            return
+        self.name = headerValue.Name()
+        self.value = headerValue.Value()
+
+    # HeaderValueT
+    def Pack(self, builder):
+        if self.name is not None:
+            name = builder.CreateString(self.name)
+        if self.value is not None:
+            value = builder.CreateString(self.value)
+        HeaderValueStart(builder)
+        if self.name is not None:
+            HeaderValueAddName(builder, name)
+        if self.value is not None:
+            HeaderValueAddValue(builder, value)
+        headerValue = HeaderValueEnd(builder)
+        return headerValue

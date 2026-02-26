@@ -4,7 +4,9 @@
 
 import * as flatbuffers from 'flatbuffers';
 
-export class HeaderValue {
+
+
+export class HeaderValue implements flatbuffers.IUnpackableObject<HeaderValueT> {
   bb: flatbuffers.ByteBuffer|null = null;
   bb_pos = 0;
   __init(i:number, bb:flatbuffers.ByteBuffer):HeaderValue {
@@ -59,5 +61,36 @@ static createHeaderValue(builder:flatbuffers.Builder, nameOffset:flatbuffers.Off
   HeaderValue.addName(builder, nameOffset);
   HeaderValue.addValue(builder, valueOffset);
   return HeaderValue.endHeaderValue(builder);
+}
+
+unpack(): HeaderValueT {
+  return new HeaderValueT(
+    this.name(),
+    this.value()
+  );
+}
+
+
+unpackTo(_o: HeaderValueT): void {
+  _o.name = this.name();
+  _o.value = this.value();
+}
+}
+
+export class HeaderValueT implements flatbuffers.IGeneratedObject {
+constructor(
+  public name: string|Uint8Array|null = null,
+  public value: string|Uint8Array|null = null
+){}
+
+
+pack(builder:flatbuffers.Builder): flatbuffers.Offset {
+  const name = (this.name !== null ? builder.createString(this.name!) : 0);
+  const value = (this.value !== null ? builder.createString(this.value!) : 0);
+
+  return HeaderValue.createHeaderValue(builder,
+    name,
+    value
+  );
 }
 }

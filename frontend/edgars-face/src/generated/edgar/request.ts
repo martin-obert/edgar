@@ -4,10 +4,10 @@
 
 import * as flatbuffers from 'flatbuffers';
 
-import { HeaderValue } from '../edgar/header-value';
+import { HeaderValue, HeaderValueT } from '../edgar/header-value';
 
 
-export class Request {
+export class Request implements flatbuffers.IUnpackableObject<RequestT> {
   bb: flatbuffers.ByteBuffer|null = null;
   bb_pos = 0;
   __init(i:number, bb:flatbuffers.ByteBuffer):Request {
@@ -35,8 +35,23 @@ headersLength():number {
   return offset ? this.bb!.__vector_len(this.bb_pos + offset) : 0;
 }
 
+body(index: number):number|null {
+  const offset = this.bb!.__offset(this.bb_pos, 6);
+  return offset ? this.bb!.readInt8(this.bb!.__vector(this.bb_pos + offset) + index) : 0;
+}
+
+bodyLength():number {
+  const offset = this.bb!.__offset(this.bb_pos, 6);
+  return offset ? this.bb!.__vector_len(this.bb_pos + offset) : 0;
+}
+
+bodyArray():Int8Array|null {
+  const offset = this.bb!.__offset(this.bb_pos, 6);
+  return offset ? new Int8Array(this.bb!.bytes().buffer, this.bb!.bytes().byteOffset + this.bb!.__vector(this.bb_pos + offset), this.bb!.__vector_len(this.bb_pos + offset)) : null;
+}
+
 static startRequest(builder:flatbuffers.Builder) {
-  builder.startObject(1);
+  builder.startObject(2);
 }
 
 static addHeaders(builder:flatbuffers.Builder, headersOffset:flatbuffers.Offset) {
@@ -55,6 +70,27 @@ static startHeadersVector(builder:flatbuffers.Builder, numElems:number) {
   builder.startVector(4, numElems, 4);
 }
 
+static addBody(builder:flatbuffers.Builder, bodyOffset:flatbuffers.Offset) {
+  builder.addFieldOffset(1, bodyOffset, 0);
+}
+
+static createBodyVector(builder:flatbuffers.Builder, data:number[]|Int8Array):flatbuffers.Offset;
+/**
+ * @deprecated This Uint8Array overload will be removed in the future.
+ */
+static createBodyVector(builder:flatbuffers.Builder, data:number[]|Uint8Array):flatbuffers.Offset;
+static createBodyVector(builder:flatbuffers.Builder, data:number[]|Int8Array|Uint8Array):flatbuffers.Offset {
+  builder.startVector(1, data.length, 1);
+  for (let i = data.length - 1; i >= 0; i--) {
+    builder.addInt8(data[i]!);
+  }
+  return builder.endVector();
+}
+
+static startBodyVector(builder:flatbuffers.Builder, numElems:number) {
+  builder.startVector(1, numElems, 1);
+}
+
 static endRequest(builder:flatbuffers.Builder):flatbuffers.Offset {
   const offset = builder.endObject();
   return offset;
@@ -68,9 +104,41 @@ static finishSizePrefixedRequestBuffer(builder:flatbuffers.Builder, offset:flatb
   builder.finish(offset, undefined, true);
 }
 
-static createRequest(builder:flatbuffers.Builder, headersOffset:flatbuffers.Offset):flatbuffers.Offset {
+static createRequest(builder:flatbuffers.Builder, headersOffset:flatbuffers.Offset, bodyOffset:flatbuffers.Offset):flatbuffers.Offset {
   Request.startRequest(builder);
   Request.addHeaders(builder, headersOffset);
+  Request.addBody(builder, bodyOffset);
   return Request.endRequest(builder);
+}
+
+unpack(): RequestT {
+  return new RequestT(
+    this.bb!.createObjList<HeaderValue, HeaderValueT>(this.headers.bind(this), this.headersLength()),
+    this.bb!.createScalarList<number>(this.body.bind(this), this.bodyLength())
+  );
+}
+
+
+unpackTo(_o: RequestT): void {
+  _o.headers = this.bb!.createObjList<HeaderValue, HeaderValueT>(this.headers.bind(this), this.headersLength());
+  _o.body = this.bb!.createScalarList<number>(this.body.bind(this), this.bodyLength());
+}
+}
+
+export class RequestT implements flatbuffers.IGeneratedObject {
+constructor(
+  public headers: (HeaderValueT)[] = [],
+  public body: (number)[] = []
+){}
+
+
+pack(builder:flatbuffers.Builder): flatbuffers.Offset {
+  const headers = Request.createHeadersVector(builder, builder.createObjectOffsetList(this.headers));
+  const body = Request.createBodyVector(builder, this.body);
+
+  return Request.createRequest(builder,
+    headers,
+    body
+  );
 }
 }

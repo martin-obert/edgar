@@ -9,6 +9,7 @@ table HeaderValue {
 
 table Request {
     headers: [HeaderValue];
+    body: [byte];
 }
 
 root_type Request;

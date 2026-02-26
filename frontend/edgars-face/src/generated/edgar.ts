@@ -2,5 +2,5 @@
 
 /* eslint-disable @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any, @typescript-eslint/no-non-null-assertion */
 
-export { HeaderValue } from './edgar/header-value';
-export { Request } from './edgar/request';
+export { HeaderValue, HeaderValueT } from './edgar/header-value';
+export { Request, RequestT } from './edgar/request';

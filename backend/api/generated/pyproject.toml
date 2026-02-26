@@ -1,0 +1,10 @@
+[project]
+name = "edgar-generated"
+version = "0.0.1"
+requires-python = ">=3.11"
+dependencies = [
+    "flatbuffers",
+]
+
+[tool.setuptools.packages.find]
+include = ["Edgar*"]
