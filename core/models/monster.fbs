@@ -1,0 +1,14 @@
+// Example IDL file for our monster's schema.
+
+namespace Edgar;
+
+table HeaderValue {
+    name: string (required);
+    value: string;
+}
+
+table Request {
+    headers: [HeaderValue];
+}
+
+root_type Request;
