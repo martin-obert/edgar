@@ -19,6 +19,12 @@ foreach ($outputPath in @($tsOutput, $pyOutput) | Select-Object -Unique) {
 
 Write-Host ""
 
+# Ensure Python output is recognized as a package
+$initFile = Join-Path $pyOutput "__init__.py"
+$initContent = "# Auto-generated package marker. Do not edit manually.`n# This file is recreated by the FlatBuffers build script to ensure Python treats this directory as a package.`n"
+Set-Content -Path $initFile -Value $initContent -NoNewline
+Write-Host "Created: $initFile" -ForegroundColor Magenta
+
 Get-ChildItem -Path $schemasPath -Filter "*.fbs" | ForEach-Object {
     $name = $_.BaseName
 

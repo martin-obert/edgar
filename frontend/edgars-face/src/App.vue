@@ -1,51 +1,30 @@
 <script setup lang="ts">
-import {onMounted, onUnmounted, ref} from "vue";
-import {Request, RequestT} from "./generated/edgar.ts";
-import {Builder, ByteBuffer} from "flatbuffers";
+import {useConnectionStore} from "./stores/connection.store.ts";
+import type {MenuItem} from "primevue/menuitem";
+import {ref} from "vue";
+import {WebSocketStateToString} from "./websocket-manager.ts";
 
-const received = ref<string | null>()
-const input = ref<string | null>()
-const ws = ref<WebSocket | null>()
-onMounted(() => {
-  const wSocket = new WebSocket("ws://127.0.0.1:8000/ws");
-  wSocket.onopen = () => {
-    console.log("Connection opened");
+const connectionStore = useConnectionStore()
+
+const items = ref<MenuItem[]>([
+  {
+    key: 'connection_state'
   }
-  wSocket.onclose = () => {
-    console.log("Connection closed");
-  }
-  wSocket.onmessage = async (e: MessageEvent) => {
-    console.log(`Received message: ${e.type}`);
-    const arrayBuffer = await e.data.arrayBuffer();
-    const buf = new ByteBuffer(new Uint8Array(arrayBuffer));
-    const req = Request.getRootAsRequest(buf);
-    received.value = new TextDecoder().decode(req.bodyArray());
-  }
-  wSocket.onerror = (e: Event) => {
-    console.log(`Received message: ${e.type}`);
-  }
-
-  ws.value = wSocket
-})
-
-onUnmounted(() => {
-  if (ws.value) ws.value.close()
-})
-
-const send = () => {
-  const r = new RequestT();
-  const b = new Builder(256)
-  b.finish(r.pack(b))
-  ws.value!.send(b.asUint8Array())
-}
-
+])
 
 </script>
 
 <template>
-  <InputText v-model="input"/>
-  <Button @click="send" label="Send"/>
-  <p>Received: {{ received }}</p>
+  <div class="card">
+    <Menubar :model="items">
+      <template #end>
+          {{ WebSocketStateToString(connectionStore.connectionState)}}
+      </template>
+    </Menubar>
+  </div>
+  <RouterView>
+
+  </RouterView>
 </template>
 
 <style scoped>
