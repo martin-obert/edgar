@@ -1,9 +1,0 @@
-pyproject.toml
-Edgar/HeaderValue.py
-Edgar/Request.py
-Edgar/__init__.py
-edgar_generated.egg-info/PKG-INFO
-edgar_generated.egg-info/SOURCES.txt
-edgar_generated.egg-info/dependency_links.txt
-edgar_generated.egg-info/requires.txt
-edgar_generated.egg-info/top_level.txt

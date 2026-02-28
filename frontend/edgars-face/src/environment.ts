@@ -1,3 +1,3 @@
 export default {
-    WS_URL: import.meta.env.WS_URL,
+    WS_URL: import.meta.env.VITE_WS_URL,
 }

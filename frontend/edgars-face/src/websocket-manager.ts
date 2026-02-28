@@ -26,8 +26,10 @@ class WebSocketManager implements IWebSocketManager {
     private _reconnectFncHandle: number | null = null;
     private _reconnectAttemptsBudget: number = 0;
 
+    private _stateInternal: WebSocketState = WebSocketState.UNSET
+
     get state(): WebSocketState {
-        return this._ws === null ? WebSocketState.UNSET : this._ws.readyState as WebSocketState
+        return this._stateInternal
     }
 
     constructor(baseUrl: string, private readonly options: { timeout?: number, retryAttempts?: number } = {
@@ -53,6 +55,8 @@ class WebSocketManager implements IWebSocketManager {
             this._ws.close(code, reason)
         }
         this._ws = null
+
+        this._updateState()
     }
 
     private stopReconnectFnc() {
@@ -62,6 +66,11 @@ class WebSocketManager implements IWebSocketManager {
         }
     }
 
+    private _updateState() {
+
+        this._stateInternal = this._ws?.readyState as WebSocketState ?? WebSocketState.UNSET
+    }
+
     async connectAsync(reset: boolean = false): Promise<void> {
         await this.disconnectAsync()
 
@@ -69,6 +78,7 @@ class WebSocketManager implements IWebSocketManager {
 
         if (this._ws) throw new Error("WebSocket not reset")
 
+        this._updateState()
         this._ws = new WebSocket(this._baseUrl)
 
         this._reconnectFncHandle = window.setTimeout(async () => {
@@ -84,16 +94,21 @@ class WebSocketManager implements IWebSocketManager {
 
         this._ws.onopen = (e: Event) => {
             this.stopReconnectFnc()
-            console.log(`Connection opened: ${e.type}`)
+            this._updateState()
+            console.log(`Connection opened: ${e.type} - ${this._ws?.readyState}`)
         }
         this._ws.onerror = (e: Event) => {
+
             console.log(`Connection error: ${e.type}`)
         }
         this._ws.onclose = (e: CloseEvent) => {
+            this._updateState()
             console.log(`Connection closed: CODE - ${e.code}, REASON - ${e.reason}, WAS_CLEAN - ${e.wasClean}`)
+
         }
         this._ws.onmessage = (e: MessageEvent<any>) => {
             console.log(`Received message: ${e.type}`)
+            this._stateInternal = WebSocketState.CLOSED
         }
     }
 
