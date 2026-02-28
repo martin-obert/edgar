@@ -7,9 +7,9 @@ table HeaderValue {
     value: string;
 }
 
-table Request {
+table Message {
     headers: [HeaderValue];
     body: [byte];
 }
 
-root_type Request;
+root_type Message;

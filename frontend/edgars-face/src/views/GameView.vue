@@ -26,7 +26,7 @@ const reconnect = async () => {
   <div>
     <h1>E.D.G.A.R.s</h1>
     <sub>{{ WebSocketStateToString(connectionStore.connectionState) }}</sub>
-    <div v-if="connectionStore.connectionState === WebSocketState.UNSET">
+    <div v-if="connectionStore.connectionState === WebSocketState.UNSET || connectionStore.connectionState === WebSocketState.CLOSED">
       <Button label="Reconnect" @click="reconnect"/>
       <ToggleSwitch v-model="connectionStore.ws.autoReconnect"/>
     </div>

@@ -7,22 +7,22 @@ import * as flatbuffers from 'flatbuffers';
 import { HeaderValue, HeaderValueT } from '../edgar/header-value';
 
 
-export class Request implements flatbuffers.IUnpackableObject<RequestT> {
+export class Message implements flatbuffers.IUnpackableObject<MessageT> {
   bb: flatbuffers.ByteBuffer|null = null;
   bb_pos = 0;
-  __init(i:number, bb:flatbuffers.ByteBuffer):Request {
+  __init(i:number, bb:flatbuffers.ByteBuffer):Message {
   this.bb_pos = i;
   this.bb = bb;
   return this;
 }
 
-static getRootAsRequest(bb:flatbuffers.ByteBuffer, obj?:Request):Request {
-  return (obj || new Request()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+static getRootAsMessage(bb:flatbuffers.ByteBuffer, obj?:Message):Message {
+  return (obj || new Message()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
 }
 
-static getSizePrefixedRootAsRequest(bb:flatbuffers.ByteBuffer, obj?:Request):Request {
+static getSizePrefixedRootAsMessage(bb:flatbuffers.ByteBuffer, obj?:Message):Message {
   bb.setPosition(bb.position() + flatbuffers.SIZE_PREFIX_LENGTH);
-  return (obj || new Request()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
+  return (obj || new Message()).__init(bb.readInt32(bb.position()) + bb.position(), bb);
 }
 
 headers(index: number, obj?:HeaderValue):HeaderValue|null {
@@ -50,7 +50,7 @@ bodyArray():Int8Array|null {
   return offset ? new Int8Array(this.bb!.bytes().buffer, this.bb!.bytes().byteOffset + this.bb!.__vector(this.bb_pos + offset), this.bb!.__vector_len(this.bb_pos + offset)) : null;
 }
 
-static startRequest(builder:flatbuffers.Builder) {
+static startMessage(builder:flatbuffers.Builder) {
   builder.startObject(2);
 }
 
@@ -91,41 +91,41 @@ static startBodyVector(builder:flatbuffers.Builder, numElems:number) {
   builder.startVector(1, numElems, 1);
 }
 
-static endRequest(builder:flatbuffers.Builder):flatbuffers.Offset {
+static endMessage(builder:flatbuffers.Builder):flatbuffers.Offset {
   const offset = builder.endObject();
   return offset;
 }
 
-static finishRequestBuffer(builder:flatbuffers.Builder, offset:flatbuffers.Offset) {
+static finishMessageBuffer(builder:flatbuffers.Builder, offset:flatbuffers.Offset) {
   builder.finish(offset);
 }
 
-static finishSizePrefixedRequestBuffer(builder:flatbuffers.Builder, offset:flatbuffers.Offset) {
+static finishSizePrefixedMessageBuffer(builder:flatbuffers.Builder, offset:flatbuffers.Offset) {
   builder.finish(offset, undefined, true);
 }
 
-static createRequest(builder:flatbuffers.Builder, headersOffset:flatbuffers.Offset, bodyOffset:flatbuffers.Offset):flatbuffers.Offset {
-  Request.startRequest(builder);
-  Request.addHeaders(builder, headersOffset);
-  Request.addBody(builder, bodyOffset);
-  return Request.endRequest(builder);
+static createMessage(builder:flatbuffers.Builder, headersOffset:flatbuffers.Offset, bodyOffset:flatbuffers.Offset):flatbuffers.Offset {
+  Message.startMessage(builder);
+  Message.addHeaders(builder, headersOffset);
+  Message.addBody(builder, bodyOffset);
+  return Message.endMessage(builder);
 }
 
-unpack(): RequestT {
-  return new RequestT(
+unpack(): MessageT {
+  return new MessageT(
     this.bb!.createObjList<HeaderValue, HeaderValueT>(this.headers.bind(this), this.headersLength()),
     this.bb!.createScalarList<number>(this.body.bind(this), this.bodyLength())
   );
 }
 
 
-unpackTo(_o: RequestT): void {
+unpackTo(_o: MessageT): void {
   _o.headers = this.bb!.createObjList<HeaderValue, HeaderValueT>(this.headers.bind(this), this.headersLength());
   _o.body = this.bb!.createScalarList<number>(this.body.bind(this), this.bodyLength());
 }
 }
 
-export class RequestT implements flatbuffers.IGeneratedObject {
+export class MessageT implements flatbuffers.IGeneratedObject {
 constructor(
   public headers: (HeaderValueT)[] = [],
   public body: (number)[] = []
@@ -133,10 +133,10 @@ constructor(
 
 
 pack(builder:flatbuffers.Builder): flatbuffers.Offset {
-  const headers = Request.createHeadersVector(builder, builder.createObjectOffsetList(this.headers));
-  const body = Request.createBodyVector(builder, this.body);
+  const headers = Message.createHeadersVector(builder, builder.createObjectOffsetList(this.headers));
+  const body = Message.createBodyVector(builder, this.body);
 
-  return Request.createRequest(builder,
+  return Message.createMessage(builder,
     headers,
     body
   );

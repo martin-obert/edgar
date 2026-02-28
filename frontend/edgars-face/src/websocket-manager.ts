@@ -71,16 +71,10 @@ class WebSocketManager implements IWebSocketManager {
         this._stateInternal = this._ws?.readyState as WebSocketState ?? WebSocketState.UNSET
     }
 
-    async connectAsync(reset: boolean = false): Promise<void> {
-        await this.disconnectAsync()
-
-        if (reset) await this.reset()
-
-        if (this._ws) throw new Error("WebSocket not reset")
-
-        this._updateState()
-        this._ws = new WebSocket(this._baseUrl)
-
+    private _setReconnectFnc() {
+        if (this._reconnectFncHandle) {
+            this.stopReconnectFnc()
+        }
         this._reconnectFncHandle = window.setTimeout(async () => {
             this._reconnectAttemptsBudget--
             await this.connectAsync()
@@ -91,6 +85,19 @@ class WebSocketManager implements IWebSocketManager {
                 this.stopReconnectFnc()
             }
         }, this.options.timeout)
+    }
+
+    async connectAsync(reset: boolean = false): Promise<void> {
+        await this.disconnectAsync()
+
+        if (reset) await this.reset()
+
+        if (this._ws) throw new Error("WebSocket not reset")
+
+        this._updateState()
+        this._ws = new WebSocket(this._baseUrl)
+        this._updateState()
+        this._setReconnectFnc()
 
         this._ws.onopen = (e: Event) => {
             this.stopReconnectFnc()
@@ -103,8 +110,13 @@ class WebSocketManager implements IWebSocketManager {
         }
         this._ws.onclose = (e: CloseEvent) => {
             this._updateState()
+            if (e.code === 1012 || e.code === 1013) {
+                if (this.autoReconnect) {
+                    this.connectAsync()
+                    return
+                }
+            }
             console.log(`Connection closed: CODE - ${e.code}, REASON - ${e.reason}, WAS_CLEAN - ${e.wasClean}`)
-
         }
         this._ws.onmessage = (e: MessageEvent<any>) => {
             console.log(`Received message: ${e.type}`)
@@ -124,6 +136,10 @@ export const WebSocketStateToString = (state: WebSocketState) => {
             return "OPEN"
         case WebSocketState.CLOSING:
             return "CLOSING"
+        case WebSocketState.CLOSED:
+            return "CLOSED"
+        default:
+            return `UNKNOWN ${state}`
     }
 }
 

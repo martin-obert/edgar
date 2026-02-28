@@ -6,25 +6,25 @@ import flatbuffers
 from flatbuffers.compat import import_numpy
 np = import_numpy()
 
-class Request(object):
+class Message(object):
     __slots__ = ['_tab']
 
     @classmethod
     def GetRootAs(cls, buf, offset=0):
         n = flatbuffers.encode.Get(flatbuffers.packer.uoffset, buf, offset)
-        x = Request()
+        x = Message()
         x.Init(buf, n + offset)
         return x
 
     @classmethod
-    def GetRootAsRequest(cls, buf, offset=0):
+    def GetRootAsMessage(cls, buf, offset=0):
         """This method is deprecated. Please switch to GetRootAs."""
         return cls.GetRootAs(buf, offset)
-    # Request
+    # Message
     def Init(self, buf, pos):
         self._tab = flatbuffers.table.Table(buf, pos)
 
-    # Request
+    # Message
     def Headers(self, j):
         o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(4))
         if o != 0:
@@ -37,19 +37,19 @@ class Request(object):
             return obj
         return None
 
-    # Request
+    # Message
     def HeadersLength(self):
         o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(4))
         if o != 0:
             return self._tab.VectorLen(o)
         return 0
 
-    # Request
+    # Message
     def HeadersIsNone(self):
         o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(4))
         return o == 0
 
-    # Request
+    # Message
     def Body(self, j):
         o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(6))
         if o != 0:
@@ -57,62 +57,62 @@ class Request(object):
             return self._tab.Get(flatbuffers.number_types.Int8Flags, a + flatbuffers.number_types.UOffsetTFlags.py_type(j * 1))
         return 0
 
-    # Request
+    # Message
     def BodyAsNumpy(self):
         o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(6))
         if o != 0:
             return self._tab.GetVectorAsNumpy(flatbuffers.number_types.Int8Flags, o)
         return 0
 
-    # Request
+    # Message
     def BodyLength(self):
         o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(6))
         if o != 0:
             return self._tab.VectorLen(o)
         return 0
 
-    # Request
+    # Message
     def BodyIsNone(self):
         o = flatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(6))
         return o == 0
 
-def RequestStart(builder):
+def MessageStart(builder):
     builder.StartObject(2)
 
 def Start(builder):
-    RequestStart(builder)
+    MessageStart(builder)
 
-def RequestAddHeaders(builder, headers):
+def MessageAddHeaders(builder, headers):
     builder.PrependUOffsetTRelativeSlot(0, flatbuffers.number_types.UOffsetTFlags.py_type(headers), 0)
 
 def AddHeaders(builder, headers):
-    RequestAddHeaders(builder, headers)
+    MessageAddHeaders(builder, headers)
 
-def RequestStartHeadersVector(builder, numElems):
+def MessageStartHeadersVector(builder, numElems):
     return builder.StartVector(4, numElems, 4)
 
 def StartHeadersVector(builder, numElems):
-    return RequestStartHeadersVector(builder, numElems)
+    return MessageStartHeadersVector(builder, numElems)
 
-def RequestCreateHeadersVector(builder, data):
+def MessageCreateHeadersVector(builder, data):
     return builder.CreateVectorOfTables(data)
 
 def CreateHeadersVector(builder, data):
-    RequestCreateHeadersVector(builder, data)
+    MessageCreateHeadersVector(builder, data)
 
-def RequestAddBody(builder, body):
+def MessageAddBody(builder, body):
     builder.PrependUOffsetTRelativeSlot(1, flatbuffers.number_types.UOffsetTFlags.py_type(body), 0)
 
 def AddBody(builder, body):
-    RequestAddBody(builder, body)
+    MessageAddBody(builder, body)
 
-def RequestStartBodyVector(builder, numElems):
+def MessageStartBodyVector(builder, numElems):
     return builder.StartVector(1, numElems, 1)
 
 def StartBodyVector(builder, numElems):
-    return RequestStartBodyVector(builder, numElems)
+    return MessageStartBodyVector(builder, numElems)
 
-def RequestCreateBodyVector(builder, data):
+def MessageCreateBodyVector(builder, data):
     data = list(data)
     builder.StartVector(1, len(data), 1)
     for item in reversed(data):
@@ -120,13 +120,13 @@ def RequestCreateBodyVector(builder, data):
     return builder.EndVector()
 
 def CreateBodyVector(builder, data):
-    RequestCreateBodyVector(builder, data)
+    MessageCreateBodyVector(builder, data)
 
-def RequestEnd(builder):
+def MessageEnd(builder):
     return builder.EndObject()
 
 def End(builder):
-    return RequestEnd(builder)
+    return MessageEnd(builder)
 
 import Edgar.HeaderValue
 try:
@@ -134,9 +134,9 @@ try:
 except:
     pass
 
-class RequestT(object):
+class MessageT(object):
 
-    # RequestT
+    # MessageT
     def __init__(
         self,
         headers = None,
@@ -147,9 +147,9 @@ class RequestT(object):
 
     @classmethod
     def InitFromBuf(cls, buf, pos):
-        request = Request()
-        request.Init(buf, pos)
-        return cls.InitFromObj(request)
+        message = Message()
+        message.Init(buf, pos)
+        return cls.InitFromObj(message)
 
     @classmethod
     def InitFromPackedBuf(cls, buf, pos=0):
@@ -157,38 +157,38 @@ class RequestT(object):
         return cls.InitFromBuf(buf, pos+n)
 
     @classmethod
-    def InitFromObj(cls, request):
-        x = RequestT()
-        x._UnPack(request)
+    def InitFromObj(cls, message):
+        x = MessageT()
+        x._UnPack(message)
         return x
 
-    # RequestT
-    def _UnPack(self, request):
-        if request is None:
+    # MessageT
+    def _UnPack(self, message):
+        if message is None:
             return
-        if not request.HeadersIsNone():
+        if not message.HeadersIsNone():
             self.headers = []
-            for i in range(request.HeadersLength()):
-                if request.Headers(i) is None:
+            for i in range(message.HeadersLength()):
+                if message.Headers(i) is None:
                     self.headers.append(None)
                 else:
-                    headerValue_ = Edgar.HeaderValue.HeaderValueT.InitFromObj(request.Headers(i))
+                    headerValue_ = Edgar.HeaderValue.HeaderValueT.InitFromObj(message.Headers(i))
                     self.headers.append(headerValue_)
-        if not request.BodyIsNone():
+        if not message.BodyIsNone():
             if np is None:
                 self.body = []
-                for i in range(request.BodyLength()):
-                    self.body.append(request.Body(i))
+                for i in range(message.BodyLength()):
+                    self.body.append(message.Body(i))
             else:
-                self.body = request.BodyAsNumpy()
+                self.body = message.BodyAsNumpy()
 
-    # RequestT
+    # MessageT
     def Pack(self, builder):
         if self.headers is not None:
             headerslist = []
             for i in range(len(self.headers)):
                 headerslist.append(self.headers[i].Pack(builder))
-            RequestStartHeadersVector(builder, len(self.headers))
+            MessageStartHeadersVector(builder, len(self.headers))
             for i in reversed(range(len(self.headers))):
                 builder.PrependUOffsetTRelative(headerslist[i])
             headers = builder.EndVector()
@@ -196,14 +196,14 @@ class RequestT(object):
             if np is not None and type(self.body) is np.ndarray:
                 body = builder.CreateNumpyVector(self.body)
             else:
-                RequestStartBodyVector(builder, len(self.body))
+                MessageStartBodyVector(builder, len(self.body))
                 for i in reversed(range(len(self.body))):
                     builder.PrependByte(self.body[i])
                 body = builder.EndVector()
-        RequestStart(builder)
+        MessageStart(builder)
         if self.headers is not None:
-            RequestAddHeaders(builder, headers)
+            MessageAddHeaders(builder, headers)
         if self.body is not None:
-            RequestAddBody(builder, body)
-        request = RequestEnd(builder)
-        return request
+            MessageAddBody(builder, body)
+        message = MessageEnd(builder)
+        return message

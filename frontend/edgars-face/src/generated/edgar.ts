@@ -3,4 +3,4 @@
 /* eslint-disable @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any, @typescript-eslint/no-non-null-assertion */
 
 export { HeaderValue, HeaderValueT } from './edgar/header-value';
-export { Request, RequestT } from './edgar/request';
+export { Message, MessageT } from './edgar/message';

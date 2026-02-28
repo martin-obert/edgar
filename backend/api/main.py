@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from starlette.websockets import WebSocket
 
-from generated.Edgar import Request
+from generated.Edgar import Message
 
 load_dotenv()  # reads variables from a .env file and sets them in os.environ
 
@@ -17,17 +17,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    print("Connected")
-    while True:
-        b = await websocket.receive_bytes()
-        req_buf = Request.Request.GetRootAsRequest(b, 0)
-        print("Received request")
-        req = Request.RequestT.InitFromObj(req_buf)
-        req.body = b"Hello"
-        builder = flatbuffers.Builder(0)
-        builder.Finish(req.Pack(builder))
-        buf = builder.Output()
-        await websocket.send_bytes(buf)
+    try:
+        await websocket.accept()
+        print("Connected")
+        while True:
+            b = await websocket.receive_bytes()
+            req_buf = Message.Message.GetRootAsMessage(b, 0)
+            print("Received request")
+            req = Message.MessageT.InitFromObj(req_buf)
+            req.body = b"Hello"
+            builder = flatbuffers.Builder(0)
+            builder.Finish(req.Pack(builder))
+            buf = builder.Output()
+            await websocket.send_bytes(buf)
+    except Exception as e:
+        print(e)
