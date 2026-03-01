@@ -40,15 +40,17 @@
 //   ws.value!.send(b.asUint8Array())
 // }
 
-import {useRouter} from "vue-router";
-import {onMounted, ref} from "vue";
+import {onMounted, ref, watch} from "vue";
 import CypherSentence from "../components/CypherSentence.vue";
-import {createClearCommand, createHelpCommand, type TerminalCommand, type TerminalMessage} from "../commands.ts";
+import {
+  createClearCommand,
+  createHelpCommand,
+  type TerminalCommand,
+  type TerminalMessage,
+  useTerminalBuffer
+} from "../commands.ts";
 
 const {commands} = defineProps<{ commands: TerminalCommand[] }>()
-
-const router = useRouter()
-
 const messages = ref<TerminalMessage[]>([])
 const command = ref<string>("")
 const commandInput = ref<HTMLInputElement | null>(null)
@@ -74,30 +76,31 @@ onMounted(() => {
   //
   // }, 1000)
 })
-
-if (!commands.some(x => x.name === "help")) {
-  commands.push(createHelpCommand(commands))
-}
-if (!commands.some(x => x.name === 'clear')) {
-  commands.push(createClearCommand(messages))
-}
-const outBuffer = ref<string[]>([])
+watch(() => commands, () => {
+  if (!commands.some(x => x.name === "help")) {
+    commands.push(createHelpCommand(commands))
+  }
+  if (!commands.some(x => x.name === 'clear')) {
+    commands.push(createClearCommand(messages))
+  }
+})
+const outBuffer = useTerminalBuffer()
 
 const enterCommand = async () => {
   messages.value.push({value: command.value, type: 'in'})
+  console.log(commands)
   const commandSaturated = command.value.trim()
   const handler = commands.find(command => command.name === commandSaturated)
   if (handler) {
-    const result = await handler.execute()
-    if (result != undefined) outBuffer.value.push(...result)
+    await handler.execute(outBuffer)
   } else {
     messages.value.push({value: `Unknown command: ${commandSaturated}, /help`, type: 'out'})
   }
   command.value = ""
 }
 const popBuffer = () => {
-  if (outBuffer.value.length > 0) {
-    messages.value.push({value: outBuffer.value.shift()!, type: 'out'})
+  if (outBuffer.items.value.length > 0) {
+    messages.value.push({value: outBuffer.pop()!, type: 'out'})
   }
 }
 
@@ -110,8 +113,8 @@ const popBuffer = () => {
         <div class="content">
           <p>
             <span v-for="(message, index) in messages" :key="index">
-              {{ message.value}}<br></span>
-            <CypherSentence v-if="outBuffer.length > 0" :sentence="outBuffer[0]!" @done="popBuffer"/>
+              {{ message.value }}<br></span>
+            <CypherSentence v-if="outBuffer.length.value > 0" :sentence="outBuffer.items.value[0]!" @done="popBuffer"/>
             <input ref="commandInput" v-model="command" v-on:keyup.enter="enterCommand"/>
           </p>
         </div>
