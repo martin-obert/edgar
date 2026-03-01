@@ -12,6 +12,9 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     Button: typeof import('primevue/button')['default']
+    CypherSentence: typeof import('./src/components/CypherSentence.vue')['default']
+    CypherWord: typeof import('./src/components/CypherWord.vue')['default']
+    EdgarsTerminal: typeof import('./src/components/EdgarsTerminal.vue')['default']
     InputText: typeof import('primevue/inputtext')['default']
     Menubar: typeof import('primevue/menubar')['default']
     RouterLink: typeof import('vue-router')['RouterLink']

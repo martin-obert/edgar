@@ -1,4 +1,5 @@
 <script setup lang="ts">
+
 // import {onMounted, onUnmounted, ref} from "vue";
 // import {Request, RequestT} from "../generated/edgar.ts";
 // import {Builder, ByteBuffer} from "flatbuffers";
@@ -40,14 +41,16 @@
 // }
 
 import {useRouter} from "vue-router";
+import {ref} from "vue";
+import {createPlayCommand, type TerminalCommand} from "../commands.ts";
+import EdgarsTerminal from "../components/EdgarsTerminal.vue";
 
-const router = useRouter()
+const commands = ref<TerminalCommand[]>([createPlayCommand(useRouter())])
 </script>
 
 <template>
-  <Button label="New Game" link @click="router.push('/game')"/>
+  <EdgarsTerminal :commands="commands"/>
 </template>
 
 <style scoped>
-
 </style>

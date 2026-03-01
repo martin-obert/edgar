@@ -1,0 +1,173 @@
+
+/* ===== MONITOR BEZEL ===== */
+.bezel {
+    background: linear-gradient(145deg, #2a2a2a, #1a1a1a);
+    border-radius: 20px;
+    padding: 20px;
+    box-shadow:
+            0 0 0 2px #333,
+            0 8px 32px rgba(0, 0, 0, 0.8),
+            inset 0 1px 0 rgba(255,255,255,0.05);
+}
+
+/* ===== BASE CRT SCREEN ===== */
+.crt {
+    position: relative;
+    width: 420px;
+    height: 300px;
+    background: #0d0d0d;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.6);
+}
+
+.crt .content {
+    position: relative;
+    z-index: 0;
+    padding: 24px;
+    height: 100%;
+    overflow: hidden;
+}
+
+.crt .content p {
+    font-family: 'VT323', monospace;
+    font-size: 18px;
+    line-height: 1;
+    color: #33ff33;
+    text-shadow: 0 0 8px rgba(51, 255, 51, 0.5);
+}
+
+.crt .content .cursor {
+    display: inline-block;
+    width: 8px;
+    height: 14px;
+    background: #33ff33;
+    vertical-align: middle;
+    animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+    50% { opacity: 0; }
+}
+
+/* ===== EFFECT: SCANLINES ===== */
+.fx-scanlines::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+            to bottom,
+            transparent 0px,
+            transparent 2px,
+            rgba(0, 0, 0, 0.3) 2px,
+            rgba(0, 0, 0, 0.3) 4px
+    );
+    pointer-events: none;
+    z-index: 2;
+}
+
+/* ===== EFFECT: RGB SUB-PIXELS ===== */
+.fx-rgb::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+            to right,
+            rgba(255, 0, 0, 0.06) 0px,
+            rgba(0, 255, 0, 0.06) 1px,
+            rgba(0, 0, 255, 0.06) 2px,
+            transparent 3px
+    );
+    background-size: 3px 1px;
+    pointer-events: none;
+    z-index: 3;
+}
+
+/* ===== EFFECT: FLICKER ===== */
+.fx-flicker {
+    animation: flicker 0.08s infinite;
+}
+
+@keyframes flicker {
+    0%   { opacity: 0.975; }
+    25%  { opacity: 1; }
+    50%  { opacity: 0.985; }
+    75%  { opacity: 1; }
+    100% { opacity: 0.97; }
+}
+
+/* ===== EFFECT: SCREEN CURVATURE via radial shadow ===== */
+.fx-curve {
+    border-radius: 12px;
+}
+.fx-curve .vignette {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(
+            ellipse at center,
+            transparent 60%,
+            rgba(0, 0, 0, 0.65) 100%
+    );
+    pointer-events: none;
+    z-index: 4;
+}
+
+/* ===== EFFECT: SCREEN GLOW ===== */
+.fx-glow {
+    box-shadow:
+            inset 0 0 80px rgba(0, 0, 0, 0.6),
+            0 0 20px rgba(51, 255, 51, 0.08),
+            0 0 60px rgba(51, 255, 51, 0.04);
+}
+
+/* ===== EFFECT: ROLLING BAR ===== */
+.fx-roll .rolling-bar {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+            to bottom,
+            transparent 0%,
+            rgba(51, 255, 51, 0.03) 48%,
+            rgba(51, 255, 51, 0.06) 50%,
+            rgba(51, 255, 51, 0.03) 52%,
+            transparent 100%
+    );
+    background-size: 100% 200%;
+    animation: roll 6s linear infinite;
+    pointer-events: none;
+    z-index: 5;
+}
+
+@keyframes roll {
+    0%   { background-position: 0 -100%; }
+    100% { background-position: 0 100%; }
+}
+
+/* ===== EFFECT: PIXELATED CONTENT (SVG filter) ===== */
+.fx-pixelate .content {
+    filter: url(#pixelate);
+}
+
+/* ===== AMBER VARIANT ===== */
+.amber .content p {
+    color: #ffaa00;
+    text-shadow: 0 0 8px rgba(255, 170, 0, 0.5);
+}
+.amber .content .cursor {
+    background: #ffaa00;
+}
+.amber.fx-glow {
+    box-shadow:
+            inset 0 0 80px rgba(0, 0, 0, 0.6),
+            0 0 20px rgba(255, 170, 0, 0.08),
+            0 0 60px rgba(255, 170, 0, 0.04);
+}
+
+/* ===== BLUE VARIANT ===== */
+.blue .content p {
+    color: #4fc3f7;
+    text-shadow: 0 0 8px rgba(79, 195, 247, 0.4);
+}
+.blue .content .cursor {
+    background: #4fc3f7;
+}

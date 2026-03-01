@@ -3,6 +3,7 @@
 import {computed, onMounted, onUnmounted, ref, watch} from "vue";
 import {useConnectionStore} from "../stores/connection.store.ts";
 import {WebSocketState, WebSocketStateToString} from "../websocket-manager.ts";
+import EdgarsTerminal from "../components/EdgarsTerminal.vue";
 
 const connectionStore = useConnectionStore()
 
@@ -24,7 +25,7 @@ const reconnect = async () => {
 
 <template>
   <div>
-    <h1>E.D.G.A.R.s</h1>
+    <EdgarsTerminal :commands="[]"/>
     <sub>{{ WebSocketStateToString(connectionStore.connectionState) }}</sub>
     <div v-if="connectionStore.connectionState === WebSocketState.UNSET || connectionStore.connectionState === WebSocketState.CLOSED">
       <Button label="Reconnect" @click="reconnect"/>

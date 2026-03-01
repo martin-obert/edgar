@@ -17,6 +17,9 @@ const items = ref<MenuItem[]>([
 <template>
   <div class="card">
     <Menubar :model="items">
+      <template #start>
+        E.D.G.A.R.s
+      </template>
       <template #end>
           {{ WebSocketStateToString(connectionStore.connectionState)}}
       </template>
