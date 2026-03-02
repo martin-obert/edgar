@@ -42,10 +42,10 @@
 
 import {useRouter} from "vue-router";
 import {ref} from "vue";
-import {createPlayCommand, type TerminalCommand} from "../commands.ts";
+import {createLoremCommand, createPlayCommand, type TerminalCommand} from "../commands.ts";
 import EdgarsTerminal from "../components/EdgarsTerminal.vue";
 
-const commands = ref<TerminalCommand[]>([createPlayCommand(useRouter())])
+const commands = ref<TerminalCommand[]>([createPlayCommand(useRouter()),createLoremCommand()])
 </script>
 
 <template>

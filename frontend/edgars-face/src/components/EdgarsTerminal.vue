@@ -40,42 +40,29 @@
 //   ws.value!.send(b.asUint8Array())
 // }
 
-import {onMounted, ref, watchEffect} from "vue";
+import {nextTick, onMounted, ref, watch} from "vue";
 import CypherSentence from "../components/CypherSentence.vue";
 import {
   createClearCommand,
   createHelpCommand,
   type TerminalCommand,
   type TerminalMessage,
-  useTerminalBuffer
 } from "../commands.ts";
+import {useTerminalBuffer} from "../terminalBuffer.ts";
+import {onKeyStroke} from "@vueuse/core";
 
 const {commands} = defineProps<{ commands: TerminalCommand[] }>()
 const messages = ref<TerminalMessage[]>([])
 const command = ref<string>("")
 const commandInput = ref<HTMLInputElement | null>(null)
-
-
+const messageStackSize = 5
+const lineLen = 100
 onMounted(() => {
   if (commandInput.value) {
     commandInput.value.focus()
   }
-  // setInterval(() => {
-  //   if (i >= originalSentence[0]!.length) return
-  //   i++
-  // }, 130)
-  //
-  // setInterval(() => {
-  //
-  //   nextWord.value = Array.from(originalSentence[0]!).map((l, idx) => idx < i ? l : randomLetter()).join("")
-  // }, 50)
-  // setInterval(() => {
-  //   if (index >= originalSentence.length) return
-  //   currentSentence.value += originalSentence[index] + (index + 1 >= originalSentence.length ? "" : " ")
-  //   index++
-  //
-  // }, 1000)
 })
+
 const c = [
   ...commands,
   createClearCommand(messages)
@@ -83,52 +70,79 @@ const c = [
 c.push(createHelpCommand(c))
 
 const internalCommands = ref<TerminalCommand[]>(c)
-
+const pushMessage = (message: TerminalMessage) => {
+  if (messages.value.length >= messageStackSize) {
+    messages.value.shift()
+  }
+  messages.value.push(message)
+}
 const outBuffer = useTerminalBuffer()
-
+const abortController = ref<AbortController>(new AbortController())
+const renderingBuffer = ref(false)
 const enterCommand = async () => {
-  messages.value.push({value: command.value, type: 'in'})
+  pushMessage({value: command.value, type: 'in'})
   const commandSaturated = command.value.trim()
   if (commandSaturated.length === 0) return
   const handler = internalCommands.value.find(command => command.name === commandSaturated)
   if (handler) {
-    await handler.execute(outBuffer)
+    await handler.execute({
+      buffer: outBuffer,
+      cancellationToken: abortController.value.signal,
+    })
+
   } else {
-    messages.value.push({value: `Unknown command: ${commandSaturated}, /help`, type: 'out'})
+    pushMessage({value: `Unknown command: ${commandSaturated}, /help`, type: 'out'})
   }
   command.value = ""
 }
 
 const popBuffer = () => {
   if (outBuffer.length.value > 0) {
-    messages.value.push({value: outBuffer.pop()!, type: 'out'})
-  } else {
-    cypher.value = undefined
+    pushMessage({value: outBuffer.pop()!, type: 'out'})
   }
 }
 
 const cypher = ref<string | undefined>(undefined)
-watchEffect(() => {
+watch(outBuffer.items, async (items) => {
   cypher.value = undefined
-  if (outBuffer.items.value.length > 0) {
-    console.log(outBuffer.items.value)
-    cypher.value = outBuffer.items.value[0]
-  }
+
+  await nextTick(() => {
+    if (items.length > 0) {
+      renderingBuffer.value = true
+      cypher.value = items[0]
+    } else {
+      if (renderingBuffer.value)
+        renderingBuffer.value = false
+      commandInput.value?.focus()
+    }
+  })
 })
 
+onKeyStroke('Escape', (e) => {
+  e.preventDefault()
+  abortController.value.abort()
+  abortController.value = new AbortController()
+  outBuffer.clear()
+})
 </script>
 
 <template>
-  <div class="flex flex-col items-center justify-center" style="max-width: 50%; max-height: 50%;">
+  <div class="flex flex-col items-center justify-center" @click="commandInput?.focus()" style="max-width: 50%; max-height: 50%;">
     <div class="bezel">
-      <div class="crt monitor fx-scanlines fx-rgb fx-flicker fx-curve fx-glow fx-roll" id="green">
-        <div class="content">
-          <p style="margin-bottom: 0;">
+      <div :style="{width: `${lineLen}ch`}" class="crt monitor fx-scanlines fx-rgb fx-flicker fx-curve fx-glow fx-roll"
+           id="green">
+        <div class="content" :style="{margin: '1em', marginBottom: '1.5em'}">
+          <div style="font-family: 'VT323', monospace" :style="{height: `${messageStackSize+1}lh`}">
+            <p style="margin: 0;">
             <span v-for="(message, index) in messages" :key="index">
               {{ message.value }}<br></span>
-            <CypherSentence v-if="cypher" :sentence="cypher" @done="popBuffer"/>
-          </p>
-          <input ref="commandInput" v-model="command" v-on:keyup.enter="enterCommand"/>
+              <CypherSentence v-if="cypher" :sentence="cypher" @done="popBuffer"/>
+            </p>
+            <input name="commandInput" v-if="!renderingBuffer" ref="commandInput" v-model="command"
+                   v-on:keyup.enter="enterCommand"/>
+          </div>
+          <div v-if="renderingBuffer"><p style="margin: 0;">Processing ... (ESC)</p></div>
+          <div v-else>&nbsp;</div>
         </div>
         <div class="vignette"></div>
         <div class="rolling-bar"></div>

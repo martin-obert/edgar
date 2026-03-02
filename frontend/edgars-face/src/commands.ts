@@ -1,24 +1,23 @@
 import type {Router} from "vue-router";
-import {customRef, type Ref} from "vue";
+import {type Ref} from "vue";
 import type {IWebSocketManager} from "./websocket-manager.ts";
+import type {TerminalOutputBuffer} from "./terminalBuffer.ts";
 
 export interface TerminalMessage {
     type: 'in' | 'out',
     value: string
 }
 
-export interface TerminalOutputBuffer {
-    write: (message: string | string[]) => void;
-    clear: () => void;
-    items: Ref<readonly string[]>
-    length: Ref<number>
-    pop: () => string | undefined
+export interface TerminalCommandContext {
+    buffer: TerminalOutputBuffer,
+    cancellationToken: AbortSignal
 }
+
 
 export interface TerminalCommand {
     name: string;
     description: string;
-    execute: (outBuffer: TerminalOutputBuffer) => Promise<void> | void;
+    execute: (context: TerminalCommandContext) => Promise<void> | void;
     abort?: () => void | Promise<void>;
 }
 
@@ -26,7 +25,7 @@ export const createPlayCommand = (router: Router) => {
     return {
         name: "play",
         description: "Play the game",
-        execute: async () => {
+        execute: async (_) => {
             await router.push('/game')
         }
     } as TerminalCommand
@@ -46,7 +45,7 @@ export const createHelpCommand: (commands: TerminalCommand[]) => TerminalCommand
     return {
         name: "help",
         description: "Show help",
-        execute: (buffer) => {
+        execute: ({buffer}) => {
             if (commands) {
                 buffer.write(commands.map(c => `${c.name} - ${c.description}`))
             }
@@ -54,7 +53,7 @@ export const createHelpCommand: (commands: TerminalCommand[]) => TerminalCommand
     } as TerminalCommand
 }
 
-export const createConnectCommand = (m: IWebSocketManager) => {
+export const createConnectCommand = (_: IWebSocketManager) => {
     return {
         name: "connect",
         description: "Connect to the server",
@@ -67,78 +66,8 @@ export const createLoremCommand = () => {
     return {
         name: "lorem",
         description: "Lorem",
-        execute: (buffer) => {
-            buffer.write("Sed sit amet imperdiet sem. Duis mollis turpis nec efficitur ultrices. Nulla sit amet erat tin.")
+        execute: ({buffer}) => {
+            buffer.write("Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nulla imperdiet fermentum sapien in feugiat. Cras molestie leo eget lacus efficitur, eget ultricies odio viverra. In hac habitasse platea dictumst. Curabitur velit erat, bibendum ut quam vel, elementum bibendum magna. Proin est elit, facilisis sed odio auctor, elementum viverra dui. Sed imperdiet, ante id tempor elementum, nunc orci posuere ipsum, auctor pharetra elit turpis eu ligula. Nulla vel purus eu ante feugiat dignissim. Cras auctor malesuada faucibus. Etiam non ornare lacus. Vestibulum scelerisque quam ut interdum semper. Ut nec felis ac velit rutrum porttitor. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Maecenas fermentum mattis pulvinar.")
         }
     } as TerminalCommand
-}
-
-export function useTerminalBuffer(lineWidth: number = 50): TerminalOutputBuffer {
-    const array: string[] = []
-    let triggerLength: () => void;
-    let triggerItems: () => void;
-
-    const items = customRef<readonly string[]>((track, trigger) => {
-        triggerItems = trigger;
-        return {
-            get() {
-                track();
-                return array;
-            },
-            set() { /* read-only */
-            },
-        };
-    });
-
-    function chunkString(str: string, maxLen: number) {
-        const chunks = [];
-        for (let i = 0; i < str.length; i += maxLen) {
-            chunks.push(str.substring(i, i + maxLen));
-        }
-        return chunks;
-    }
-
-    function write(message: string | string[]) {
-        if (typeof message === 'string') {
-            array.push(...chunkString(message, lineWidth))
-        } else {
-            for (const m of message) {
-                array.push(...chunkString(m, lineWidth))
-            }
-        }
-        triggerLength()
-        triggerItems()
-    }
-
-    function clear() {
-        array.splice(0, array.length)
-        triggerLength()
-        triggerItems()
-    }
-
-    const length = customRef<number>((track, trigger) => {
-        triggerLength = trigger;
-        return {
-            get() {
-                track();
-                return array.length;
-            },
-            set() { /* read-only */
-            },
-        };
-    })
-
-    function pop() {
-        const result = array.shift()
-        triggerLength()
-        triggerItems()
-        return result
-    }
-    return {
-        write,
-        clear,
-        length,
-        items,
-        pop
-    }
 }
