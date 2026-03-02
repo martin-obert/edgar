@@ -40,7 +40,7 @@
 //   ws.value!.send(b.asUint8Array())
 // }
 
-import {onMounted, ref, watch, watchEffect} from "vue";
+import {onMounted, ref, watchEffect} from "vue";
 import CypherSentence from "../components/CypherSentence.vue";
 import {
   createClearCommand,
@@ -76,20 +76,21 @@ onMounted(() => {
   //
   // }, 1000)
 })
-watch(() => commands, () => {
-  if (!commands.some(x => x.name === "help")) {
-    commands.push(createHelpCommand(commands))
-  }
-  if (!commands.some(x => x.name === 'clear')) {
-    commands.push(createClearCommand(messages))
-  }
-})
+const c = [
+  ...commands,
+  createClearCommand(messages)
+]
+c.push(createHelpCommand(c))
+
+const internalCommands = ref<TerminalCommand[]>(c)
+
 const outBuffer = useTerminalBuffer()
 
 const enterCommand = async () => {
   messages.value.push({value: command.value, type: 'in'})
   const commandSaturated = command.value.trim()
-  const handler = commands.find(command => command.name === commandSaturated)
+  if (commandSaturated.length === 0) return
+  const handler = internalCommands.value.find(command => command.name === commandSaturated)
   if (handler) {
     await handler.execute(outBuffer)
   } else {
@@ -101,6 +102,8 @@ const enterCommand = async () => {
 const popBuffer = () => {
   if (outBuffer.length.value > 0) {
     messages.value.push({value: outBuffer.pop()!, type: 'out'})
+  } else {
+    cypher.value = undefined
   }
 }
 
@@ -120,12 +123,12 @@ watchEffect(() => {
     <div class="bezel">
       <div class="crt monitor fx-scanlines fx-rgb fx-flicker fx-curve fx-glow fx-roll" id="green">
         <div class="content">
-          <p>
+          <p style="margin-bottom: 0;">
             <span v-for="(message, index) in messages" :key="index">
               {{ message.value }}<br></span>
             <CypherSentence v-if="cypher" :sentence="cypher" @done="popBuffer"/>
-            <input ref="commandInput" v-model="command" v-on:keyup.enter="enterCommand"/>
           </p>
+          <input ref="commandInput" v-model="command" v-on:keyup.enter="enterCommand"/>
         </div>
         <div class="vignette"></div>
         <div class="rolling-bar"></div>
