@@ -1,4 +1,4 @@
-import {Message, MessageT} from "./generated/edgar.ts";
+import {Message} from "./generated/edgar.ts";
 import * as flatbuffers from "flatbuffers";
 
 export interface IWebSocketManager {
@@ -33,12 +33,19 @@ class WebSocketManager implements IWebSocketManager {
         this._baseUrl = baseUrl;
     }
 
-    sendAsync(_: Uint8Array): Promise<void> {
-        throw new Error("Method not implemented.");
+    async sendAsync(data: Uint8Array): Promise<void> {
+        if (!this._ws)
+            throw new Error("WebSocket not set")
+        if (this.state !== WebSocketState.OPEN)
+            throw new Error("WebSocket is not open")
+
+        console.log(`Sending data: ${data.length}`)
+        this._ws.send(data)
     }
 
     async disconnectAsync(code?: number, reason?: string): Promise<void> {
         if (this._ws) {
+            console.log(`Disconnecting from: ${this._baseUrl}`)
             this._ws.close(code, reason)
         }
         this._ws = null
@@ -55,7 +62,7 @@ class WebSocketManager implements IWebSocketManager {
         await this.disconnectAsync()
 
         cancellationSignal.addEventListener('abort', async () => {
-            await this.disconnectAsync()
+            // await this.disconnectAsync()
         })
 
         return new Promise<void>((resolve, reject) => {
@@ -80,12 +87,16 @@ class WebSocketManager implements IWebSocketManager {
                 console.log(`Connection closed: CODE - ${e.code}, REASON - ${e.reason}, WAS_CLEAN - ${e.wasClean}`)
                 reject(e)
             }
-            this._ws.onmessage = (e: MessageEvent<any>) => {
+            this._ws.onmessage = async (e: MessageEvent<any>) => {
                 console.log(`Received message: ${e.type}`)
-                const array = new Uint8Array(e.data.arrayBuffer())
-                const bb = new flatbuffers.ByteBuffer(array)
-                const message = Message.getRootAsMessage(bb).unpack()
-                console.log(new TextDecoder().decode(message.body!))
+                const buffer = e.data instanceof Blob
+                    ? await e.data.arrayBuffer()
+                    : e.data;
+                const array = new Uint8Array(buffer);
+                const bb = new flatbuffers.ByteBuffer(array);
+                const message = Message.getRootAsMessage(bb).unpack();
+                const text = new TextDecoder().decode(new Uint8Array(message.body.map(b => b & 0xFF)));
+                console.log(text);
             }
 
             setTimeout(async () => {

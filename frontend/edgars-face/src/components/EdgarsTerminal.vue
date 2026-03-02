@@ -93,12 +93,13 @@ const executeCommand = async (value: string, options?: { push?: boolean }) => {
   const commandSaturated = value.trim()
   if (commandSaturated.length === 0) return
 
-  currentCommand.value = internalCommands.value.find(command => command.name === commandSaturated)
+  currentCommand.value = internalCommands.value.find(command => command.canProcess(commandSaturated))
   if (currentCommand.value) {
     try {
       await currentCommand.value.execute({
         buffer: outBuffer,
         cancellationToken: abortController.value.signal,
+        command: commandSaturated
       })
     } finally {
       currentCommand.value = undefined
@@ -162,7 +163,7 @@ onKeyStroke('Escape', (e) => {
               {{ message.value }}<br></span>
               <CypherSentence v-if="cypher" :sentence="cypher" @done="popBuffer"/>
             </p>
-            <input name="commandInput" v-if="!renderingBuffer && !currentCommand" ref="commandInput"
+            > <input name="commandInput" v-if="!renderingBuffer && !currentCommand" ref="commandInput"
                    v-on:keyup.enter="executeCommand(($event.target as HTMLInputElement).value)"/>
           </div>
           <div v-if="renderingBuffer || currentCommand"><p style="margin: 0;">Processing ... (ESC)</p></div>
@@ -194,4 +195,5 @@ onKeyStroke('Escape', (e) => {
   padding: 0;
   margin: 0;
 }
+
 </style>

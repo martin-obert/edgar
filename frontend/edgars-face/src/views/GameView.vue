@@ -1,21 +1,20 @@
 <script setup lang="ts">
 import {useConnectionStore} from "../stores/connection.store.ts";
 import EdgarsTerminal from "../components/EdgarsTerminal.vue";
-import {createConnectCommand} from "../commands.ts";
+import {createConnectCommand, createPromptCommand} from "../commands.ts";
 
 const connectionStore = useConnectionStore()
-connectionStore.ws.autoReconnect = true
-
+const gameCommands = [createConnectCommand(connectionStore.ws), createPromptCommand(connectionStore.ws)]
 </script>
 
 <template>
   <div>
-    <EdgarsTerminal :commands="[createConnectCommand(connectionStore.ws)]" startup="connect"/>
-<!--    <sub>{{ WebSocketStateToString(connectionStore.connectionState) }}</sub>-->
-<!--    <div v-if="connectionStore.connectionState === WebSocketState.UNSET || connectionStore.connectionState === WebSocketState.CLOSED">-->
-<!--      <Button label="Reconnect" @click="reconnect"/>-->
-<!--      <ToggleSwitch v-model="connectionStore.ws.autoReconnect"/>-->
-<!--    </div>-->
+    <EdgarsTerminal :commands="gameCommands" startup="connect"/>
+    <!--    <sub>{{ WebSocketStateToString(connectionStore.connectionState) }}</sub>-->
+    <!--    <div v-if="connectionStore.connectionState === WebSocketState.UNSET || connectionStore.connectionState === WebSocketState.CLOSED">-->
+    <!--      <Button label="Reconnect" @click="reconnect"/>-->
+    <!--      <ToggleSwitch v-model="connectionStore.ws.autoReconnect"/>-->
+    <!--    </div>-->
   </div>
 </template>
 
