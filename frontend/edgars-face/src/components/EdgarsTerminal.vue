@@ -81,6 +81,7 @@ const pushMessage = (message: TerminalMessage) => {
 }
 const outBuffer = useTerminalBuffer()
 const abortController = ref<AbortController>(new AbortController())
+const currentCommand = ref<TerminalCommand | undefined>()
 const renderingBuffer = ref(false)
 const executeCommand = async (value: string, options?: { push?: boolean }) => {
   if (options && options.push)
@@ -92,13 +93,16 @@ const executeCommand = async (value: string, options?: { push?: boolean }) => {
   const commandSaturated = value.trim()
   if (commandSaturated.length === 0) return
 
-  const handler = internalCommands.value.find(command => command.name === commandSaturated)
-  if (handler) {
-    await handler.execute({
-      buffer: outBuffer,
-      cancellationToken: abortController.value.signal,
-    })
-
+  currentCommand.value = internalCommands.value.find(command => command.name === commandSaturated)
+  if (currentCommand.value) {
+    try {
+      await currentCommand.value.execute({
+        buffer: outBuffer,
+        cancellationToken: abortController.value.signal,
+      })
+    } finally {
+      currentCommand.value = undefined
+    }
   } else {
     pushMessage({value: `Unknown command: ${commandSaturated}, /help`, type: 'out'})
   }
@@ -111,19 +115,30 @@ const popBuffer = () => {
 }
 
 const cypher = ref<string | undefined>(undefined)
-watch(outBuffer.items, async (items) => {
-  cypher.value = undefined
 
-  await nextTick(() => {
-    if (items.length > 0) {
-      renderingBuffer.value = true
-      cypher.value = items[0]
-    } else {
-      if (renderingBuffer.value)
-        renderingBuffer.value = false
-      commandInput.value?.focus()
+watch(outBuffer.items, async (items) => {
+  if (items.length > 0) {
+    if (items[0] !== cypher.value) {
+      cypher.value = undefined
+      await nextTick(() => {
+        if (items.length > 0) {
+          renderingBuffer.value = true
+          cypher.value = items[0]
+        } else {
+          if (renderingBuffer.value)
+            renderingBuffer.value = false
+          commandInput.value?.focus()
+          cypher.value = undefined
+        }
+      })
     }
-  })
+  } else {
+    if (renderingBuffer.value)
+      renderingBuffer.value = false
+    cypher.value = undefined
+    commandInput.value?.focus()
+  }
+
 })
 
 onKeyStroke('Escape', (e) => {
@@ -147,10 +162,10 @@ onKeyStroke('Escape', (e) => {
               {{ message.value }}<br></span>
               <CypherSentence v-if="cypher" :sentence="cypher" @done="popBuffer"/>
             </p>
-            <input name="commandInput" v-if="!renderingBuffer" ref="commandInput"
+            <input name="commandInput" v-if="!renderingBuffer && !currentCommand" ref="commandInput"
                    v-on:keyup.enter="executeCommand(($event.target as HTMLInputElement).value)"/>
           </div>
-          <div v-if="renderingBuffer"><p style="margin: 0;">Processing ... (ESC)</p></div>
+          <div v-if="renderingBuffer || currentCommand"><p style="margin: 0;">Processing ... (ESC)</p></div>
           <div v-else>&nbsp;</div>
         </div>
         <div class="vignette"></div>

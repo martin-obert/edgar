@@ -57,10 +57,25 @@ export const createConnectCommand = (ws: IWebSocketManager) => {
     return {
         name: "connect",
         description: "Connect to the server",
-        execute: async ({buffer}) => {
+        execute: async ({buffer, cancellationToken}) => {
+            const timeout = 1500
+            const reconnectionAttempts = 10
             buffer.write("Connecting...")
-            await ws.connectAsync()
-            buffer.write("Connected")
+            for (let i = 0; i < reconnectionAttempts; i++) {
+                if(cancellationToken.aborted) return
+                try {
+                    await ws.connectAsync(timeout, cancellationToken)
+                    buffer.write("Connected")
+                    return
+                } catch (e) {
+                    if(cancellationToken.aborted){
+                        buffer.write("Connection aborted")
+                        return
+                    }
+                    buffer.write(`Reconnecting ${i+1}/${reconnectionAttempts}...`)
+                    await new Promise(resolve => setTimeout(resolve, timeout))
+                }
+            }
         }
     } as TerminalCommand
 }

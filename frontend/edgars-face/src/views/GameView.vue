@@ -4,7 +4,7 @@ import EdgarsTerminal from "../components/EdgarsTerminal.vue";
 import {createConnectCommand} from "../commands.ts";
 
 const connectionStore = useConnectionStore()
-
+connectionStore.ws.autoReconnect = true
 
 </script>
 
