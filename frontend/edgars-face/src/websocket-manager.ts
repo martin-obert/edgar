@@ -1,3 +1,6 @@
+import {Message, MessageT} from "./generated/edgar.ts";
+import * as flatbuffers from "flatbuffers";
+
 export interface IWebSocketManager {
     get state(): WebSocketState
 
@@ -79,7 +82,10 @@ class WebSocketManager implements IWebSocketManager {
             }
             this._ws.onmessage = (e: MessageEvent<any>) => {
                 console.log(`Received message: ${e.type}`)
-                this._stateInternal = WebSocketState.CLOSED
+                const array = new Uint8Array(e.data.arrayBuffer())
+                const bb = new flatbuffers.ByteBuffer(array)
+                const message = Message.getRootAsMessage(bb).unpack()
+                console.log(new TextDecoder().decode(message.body!))
             }
 
             setTimeout(async () => {
