@@ -40,7 +40,7 @@
 //   ws.value!.send(b.asUint8Array())
 // }
 
-import {onMounted, ref, watch} from "vue";
+import {onMounted, ref, watch, watchEffect} from "vue";
 import CypherSentence from "../components/CypherSentence.vue";
 import {
   createClearCommand,
@@ -88,7 +88,6 @@ const outBuffer = useTerminalBuffer()
 
 const enterCommand = async () => {
   messages.value.push({value: command.value, type: 'in'})
-  console.log(commands)
   const commandSaturated = command.value.trim()
   const handler = commands.find(command => command.name === commandSaturated)
   if (handler) {
@@ -98,11 +97,21 @@ const enterCommand = async () => {
   }
   command.value = ""
 }
+
 const popBuffer = () => {
-  if (outBuffer.items.value.length > 0) {
+  if (outBuffer.length.value > 0) {
     messages.value.push({value: outBuffer.pop()!, type: 'out'})
   }
 }
+
+const cypher = ref<string | undefined>(undefined)
+watchEffect(() => {
+  cypher.value = undefined
+  if (outBuffer.items.value.length > 0) {
+    console.log(outBuffer.items.value)
+    cypher.value = outBuffer.items.value[0]
+  }
+})
 
 </script>
 
@@ -114,7 +123,7 @@ const popBuffer = () => {
           <p>
             <span v-for="(message, index) in messages" :key="index">
               {{ message.value }}<br></span>
-            <CypherSentence v-if="outBuffer.length.value > 0" :sentence="outBuffer.items.value[0]!" @done="popBuffer"/>
+            <CypherSentence v-if="cypher" :sentence="cypher" @done="popBuffer"/>
             <input ref="commandInput" v-model="command" v-on:keyup.enter="enterCommand"/>
           </p>
         </div>

@@ -32,8 +32,8 @@ const decryptFunction = () => {
 }
 
 watch(() => word, () => {
-  clearIndex = 0
   displayed.value = "";
+  clearIndex = 0
   decryptFunction()
 }, {immediate: true})
 </script>

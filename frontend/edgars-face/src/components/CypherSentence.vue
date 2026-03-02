@@ -8,13 +8,13 @@ const {sentence} = defineProps<{ sentence: string }>()
 
 const words = computed(() => sentence.split(" "))
 console.log('start - ' + new Date())
+const index = ref<number>(0)
 
 watch(() => sentence, () => {
   index.value = 0
-  console.log('start - ' + new Date())
-})
+  console.log(new Date() + ' - ' + sentence)
+}, {immediate: true})
 
-const index = ref<number>(0)
 
 const onWordDone = () => {
   index.value++
@@ -23,11 +23,14 @@ const onWordDone = () => {
     $emit('done', sentence)
   }
 }
-
+const isFirst = (idx: number) : boolean => idx === 0
+const isLast = (idx: number) : boolean => idx === words.value.length - 1
 </script>
 
 <template>
-  <CypherWord v-for="w in words" :word="w + (index < words.length - 1 ? ' ' : '')" @done="onWordDone"/>
+  <span v-for="(w, idx) in words">
+    <CypherWord :word="w" @done="onWordDone"/><span v-if="!isLast(idx) && !isFirst(idx)">&nbsp;</span>
+  </span>
 </template>
 
 <style scoped>
