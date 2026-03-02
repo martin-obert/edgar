@@ -51,16 +51,19 @@ import {
 import {useTerminalBuffer} from "../terminalBuffer.ts";
 import {onKeyStroke} from "@vueuse/core";
 
-const {commands} = defineProps<{ commands: TerminalCommand[] }>()
+const {commands, startup} = defineProps<{ commands: TerminalCommand[], startup?: string }>()
 const messages = ref<TerminalMessage[]>([])
-const command = ref<string>("")
 const commandInput = ref<HTMLInputElement | null>(null)
 const messageStackSize = 5
 const lineLen = 100
+
 onMounted(() => {
   if (commandInput.value) {
     commandInput.value.focus()
   }
+
+  if (startup)
+    executeCommand(startup, {push: false})
 })
 
 const c = [
@@ -79,10 +82,16 @@ const pushMessage = (message: TerminalMessage) => {
 const outBuffer = useTerminalBuffer()
 const abortController = ref<AbortController>(new AbortController())
 const renderingBuffer = ref(false)
-const enterCommand = async () => {
-  pushMessage({value: command.value, type: 'in'})
-  const commandSaturated = command.value.trim()
+const executeCommand = async (value: string, options?: { push?: boolean }) => {
+  if (options && options.push)
+    pushMessage({value: value, type: 'in'})
+
+  if (commandInput.value)
+    commandInput.value.value = ""
+
+  const commandSaturated = value.trim()
   if (commandSaturated.length === 0) return
+
   const handler = internalCommands.value.find(command => command.name === commandSaturated)
   if (handler) {
     await handler.execute({
@@ -93,7 +102,6 @@ const enterCommand = async () => {
   } else {
     pushMessage({value: `Unknown command: ${commandSaturated}, /help`, type: 'out'})
   }
-  command.value = ""
 }
 
 const popBuffer = () => {
@@ -127,7 +135,8 @@ onKeyStroke('Escape', (e) => {
 </script>
 
 <template>
-  <div class="flex flex-col items-center justify-center" @click="commandInput?.focus()" style="max-width: 50%; max-height: 50%;">
+  <div class="flex flex-col items-center justify-center" @click="commandInput?.focus()"
+       style="max-width: 50%; max-height: 50%;">
     <div class="bezel">
       <div :style="{width: `${lineLen}ch`}" class="crt monitor fx-scanlines fx-rgb fx-flicker fx-curve fx-glow fx-roll"
            id="green">
@@ -138,8 +147,8 @@ onKeyStroke('Escape', (e) => {
               {{ message.value }}<br></span>
               <CypherSentence v-if="cypher" :sentence="cypher" @done="popBuffer"/>
             </p>
-            <input name="commandInput" v-if="!renderingBuffer" ref="commandInput" v-model="command"
-                   v-on:keyup.enter="enterCommand"/>
+            <input name="commandInput" v-if="!renderingBuffer" ref="commandInput"
+                   v-on:keyup.enter="executeCommand(($event.target as HTMLInputElement).value)"/>
           </div>
           <div v-if="renderingBuffer"><p style="margin: 0;">Processing ... (ESC)</p></div>
           <div v-else>&nbsp;</div>

@@ -53,11 +53,14 @@ export const createHelpCommand: (commands: TerminalCommand[]) => TerminalCommand
     } as TerminalCommand
 }
 
-export const createConnectCommand = (_: IWebSocketManager) => {
+export const createConnectCommand = (ws: IWebSocketManager) => {
     return {
         name: "connect",
         description: "Connect to the server",
-        execute: (_) => {
+        execute: async ({buffer}) => {
+            buffer.write("Connecting...")
+            await ws.connectAsync()
+            buffer.write("Connected")
         }
     } as TerminalCommand
 }
