@@ -1,7 +1,9 @@
+import json
 from dataclasses import dataclass
-
+from os import getenv
 import flatbuffers
-from fastapi import FastAPI
+import httpx
+from fastapi import FastAPI, requests
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from starlette.websockets import WebSocket
@@ -19,9 +21,10 @@ load_dotenv()  # reads variables from a .env file and sets them in os.environ
 @dataclass(frozen=True)  # frozen=True makes it immutable (like const)
 class MessageHeaders:
     id: str
+    is_partial: str
 
 
-known_headers = MessageHeaders(id="id")
+known_headers = MessageHeaders(id="id", is_partial="partial-response")
 
 
 def parse_message(b: bytes) -> Message.MessageT:
@@ -56,6 +59,7 @@ class TerminalRequest:
         self.message = message
         self.websocket = websocket
         self.__id: str | None = None
+        self.__body: str | None = None
 
     @property
     def id(self) -> str:
@@ -63,12 +67,15 @@ class TerminalRequest:
             self.__id = get_header_value(self.message, known_headers.id)
         return self.__id
 
+    @property
     def body(self) -> str | None:
-        return self.message.body
+        if self.__body is None:
+            self.__body = bytes(self.message.body).decode('utf-8')
+        return self.__body
 
-    async def respond(self, message: str):
+    async def respond(self, message: str, is_partial: bool = False):
         data = message.encode('utf-8')
-        bytes_data = create_message(data, {known_headers.id: self.id})
+        bytes_data = create_message(data, {known_headers.id: self.id, known_headers.is_partial: str(is_partial)})
         print(
             f"Sending message with id {self.id} to websocket: {len(bytes_data)}"
         )
@@ -94,6 +101,28 @@ app.add_middleware(
 )
 
 
+async def send_prompt(val: str, request: TerminalRequest):
+    async with httpx.AsyncClient() as client:
+        url = f"{getenv("API_BASE_URL")}/api/generate"
+        print(url)
+        async  with client.stream('POST', url,
+                                  headers={
+                                      'Content-Type': 'application/json',
+                                      'CF-Access-Client-Id': getenv("CF_ACCESS_CLIENT_ID"),
+                                      'CF-Access-Client-Secret': getenv("CF_ACCESS_CLIENT_SECRET")
+                                  },
+                                  json={'model': 'qwen2.5:3b', 'prompt': val, 'stream': True}) as r:
+            async for line in r.aiter_lines():
+                chunk = json.loads(line)
+                print(chunk["response"])
+                if chunk.get('done'):
+                    await request.respond("")
+                    break
+                await request.respond(chunk["response"], True)
+
+            r.raise_for_status()
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     try:
@@ -104,8 +133,8 @@ async def websocket_endpoint(websocket: WebSocket):
             message = parse_message(b)
             req = TerminalRequest(message, websocket)
             manager.requests[req.id] = req
-            print(f"Message received: {req.id}")
-            await manager.requests[req.id].respond("Hello")
+            print(f"Message received: {req.id} - {req.body}")
+            await send_prompt(req.body, req)
             manager.complete(req.id)
     except Exception as e:
         print(e)

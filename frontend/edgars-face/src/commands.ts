@@ -71,7 +71,9 @@ export const createHelpCommand: (commands: TerminalCommand[]) => TerminalCommand
         description: "Show help",
         execute: ({buffer}) => {
             if (commands) {
-                buffer.write(commands.map(c => `${c.name} - ${c.description}`))
+                for (const c of commands) {
+                    buffer.write(`${c.name} - ${c.description}`)
+                }
             }
         }
     } as TerminalCommand
@@ -109,7 +111,7 @@ export const createPromptCommand = (ms: IMessageManager, ws: IWebSocketManager) 
                     }
                 })
 
-                await request.wait(3000)
+                await request.wait(10000)
 
                 console.log("Sent prompt", request.id)
             } catch (e) {

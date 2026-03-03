@@ -1,7 +1,7 @@
 import {customRef, type Ref} from "vue";
 
 export interface TerminalOutputBuffer {
-    write: (message: string | string[]) => void;
+    write: (message: string, options?: { append: boolean }) => void;
     clear: () => void;
     items: Ref<readonly string[]>
     length: Ref<number>
@@ -44,14 +44,11 @@ export function useTerminalBuffer(lineWidth: number = 50): TerminalOutputBuffer 
         return lines;
     }
 
-    function write(message: string | string[]) {
-        if (typeof message === 'string') {
-            array.push(...smartSplit(message, lineWidth))
-        } else {
-            for (const m of message) {
-                array.push(...smartSplit(m, lineWidth))
-            }
+    function write(message: string, options?: { append: boolean }) {
+        if (options?.append) {
+            message = array[array.length - 1] + message
         }
+        array.push(...smartSplit(message, lineWidth))
         triggerLength()
         triggerItems()
     }

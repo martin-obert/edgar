@@ -12,6 +12,17 @@ export const getHeader = (headers: HeaderValueT[], key: string): string | undefi
     return undefined
 }
 
+export const isPartialResponse = (headers: HeaderValueT[]) => {
+    const val = getHeader(headers, 'partial-response')
+    if(!val) return false
+
+    return val.toLowerCase() === 'true' || val === '1'
+}
+
+export const getRequestId = (headers: HeaderValueT[]) => {
+    return getHeader(headers, 'id')
+}
+
 export const getBody = (body: number[])=>{
     return  new TextDecoder().decode(new Uint8Array(body.map(b => b & 0xFF)));
 }

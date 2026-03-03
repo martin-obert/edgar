@@ -1,5 +1,12 @@
 import type {MessageT} from "./generated/edgar/message.ts";
-import {createWebSocketMessage, getBody, getHeader, messageType} from "./websocket-messaging.ts";
+import {
+    createWebSocketMessage,
+    getBody,
+    getHeader,
+    getRequestId,
+    isPartialResponse,
+    messageType
+} from "./websocket-messaging.ts";
 import {v4 as uuidv4} from "uuid";
 
 export declare type Errors = 'ALREADY_RUNNING_PROMPT' | 'STREAM_NOT_WRITABLE';
@@ -21,8 +28,6 @@ export class MessageManagerError extends Error {
 interface WsRequest {
     id: string
 
-    cancel(): void
-
     wait(timeout: number): Promise<WsRequestResult>
 }
 
@@ -31,29 +36,35 @@ class WsRequestWrapper implements WsRequest {
     private _timeoutHandle: number | undefined;
     private _error: string | undefined;
 
-    constructor(public id: string, private readonly _onResponse: (response: WsResponseChunk) => void) {
+    get hasCompleted(): boolean {
+        return this._state === 'complete' || this._state === 'error'
+    }
+
+    constructor(public id: string, private _onResponse?: (response: WsResponseChunk) => void) {
 
     }
 
+    private _resolve?: any;
+    private _reject?: any;
+
     wait(timeout: number): Promise<WsRequestResult> {
         return new Promise<WsRequestResult>((resolve, reject) => {
+            this._resolve = resolve
+            this._reject = reject
+
             this._timeoutHandle = setTimeout(() => {
                 if (this._state === 'pending') {
-                    this._state = 'error'
                     this._error = 'Timeout after ' + timeout + 'ms'
-                    reject(new Error(this._error))
-                    return
+                    this.finalize()
                 }
-                resolve({
-                    state: this._state,
-                    error: this._error
-                })
             }, timeout)
         })
     }
 
     onMessage(message: MessageT): void {
-        const id = getHeader(message.headers, 'id')
+        if (this.hasCompleted) return
+
+        const id = getRequestId(message.headers)
         if (!id) {
             console.error("No id header found")
             return
@@ -63,20 +74,47 @@ class WsRequestWrapper implements WsRequest {
             return
         }
 
-        this._onResponse({
-            content: getBody(message.body),
-            complete: true
-        })
+        const isPartial = isPartialResponse(message.headers)
+        console.log(isPartial ? "Partial response" : "Full response")
+        this._state = isPartial ? 'pending' : 'complete'
 
-        this._state = 'complete'
+        if (this._onResponse)
+            this._onResponse({
+                content: getBody(message.body),
+                complete: this.hasCompleted
+            })
+
+        if (this.hasCompleted)
+            this.finalize()
     }
 
+    private finalize() {
+        if(this._state === 'pending')
+            throw new Error("Request is still pending")
 
-    cancel(): void {
+        if (this._state === 'error') {
+            this._reject!(new Error(this._error))
+            return;
+        }
+
+
+        this._resolve!({
+            state: this._state,
+            error: this._error
+        })
+
+        this.dispose()
+    }
+
+    private dispose() {
+        this._resolve = undefined
+        this._reject = undefined
+        this._onResponse = undefined
         if (this._timeoutHandle !== undefined) {
             clearTimeout(this._timeoutHandle);
             this._timeoutHandle = undefined;
         }
+
     }
 
 
@@ -127,7 +165,10 @@ class MessageManager implements IMessageManager {
         onResponse: (response: WsResponseChunk) => void
     }): WsRequest {
         if (this._currentPrompt) {
-            throw new MessageManagerError("Prompt already in progress", 'ALREADY_RUNNING_PROMPT')
+            if (this._currentPrompt.hasCompleted)
+                this._currentPrompt = undefined
+            else
+                throw new MessageManagerError("Prompt already in progress", 'ALREADY_RUNNING_PROMPT')
         }
 
         if (!this._messageStream.canWrite) {
@@ -164,8 +205,8 @@ class MessageManager implements IMessageManager {
             if (inMessage) {
                 if (this._currentPrompt && this._currentPrompt.id === getHeader(inMessage.headers, 'id')) {
                     this._currentPrompt.onMessage(inMessage)
-                    // TODO: check if prompt is complete
-                    this._currentPrompt = undefined
+                    if (this._currentPrompt.hasCompleted)
+                        this._currentPrompt = undefined
                 }
             }
         }, this.loopTimeout)
