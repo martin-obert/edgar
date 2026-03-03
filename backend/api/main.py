@@ -1,4 +1,5 @@
 import json
+import logging
 from dataclasses import dataclass
 from os import getenv
 import flatbuffers
@@ -10,7 +11,9 @@ from starlette.websockets import WebSocket
 import sys
 from pathlib import Path
 
-from typing_extensions import get_args
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("api")
+
 
 sys.path.insert(0, str(Path(__file__).parent / "generated"))
 
@@ -73,7 +76,7 @@ class TerminalRequest:
     @property
     def body(self) -> str | None:
         if self.__body is None:
-            self.__body = bytes(self.message.body).decode('utf-8')
+            self.__body = bytes(b & 0xFF for b in self.message.body).decode('utf-8')
         return self.__body
 
     async def respond(self, message: str, headers: dict[str, str]):
@@ -129,7 +132,7 @@ async def send_prompt(val: str, request: TerminalRequest):
                     is_partial = str(True)
 
                 await request.respond(chunk["response"], {
-                    known_headers.chunk_id: idx,
+                    known_headers.chunk_id: str(idx),
                     known_headers.is_partial: is_partial,
                     known_headers.id: request.id
                 })
@@ -145,13 +148,14 @@ async def send_prompt(val: str, request: TerminalRequest):
 async def websocket_endpoint(websocket: WebSocket):
     try:
         await websocket.accept()
-        print("Connected")
+        logger.info("Websocket connected")
         while True:
+            logger.info("Waiting for message")
             b = await websocket.receive_bytes()
+            logger.info("Received message")
             message = parse_message(b)
             req = TerminalRequest(message, websocket)
             manager.requests[req.id] = req
-            print(f"Message received: {req.id} - {req.body}")
             await send_prompt(req.body, req)
             manager.complete(req.id)
     except Exception as e:

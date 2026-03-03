@@ -1,8 +1,7 @@
 import type {MessageT} from "./generated/edgar/message.ts";
 import {
     createWebSocketMessage,
-    getBody,
-    getHeader,
+    getBody, getChunkId,
     getRequestId,
     isPartialResponse,
     messageType
@@ -75,13 +74,13 @@ class WsRequestWrapper implements WsRequest {
         }
 
         const isPartial = isPartialResponse(message.headers)
-        console.log(isPartial ? "Partial response" : "Full response")
         this._state = isPartial ? 'pending' : 'complete'
-
+        const chunkId = getChunkId(message.headers)
         if (this._onResponse)
             this._onResponse({
                 content: getBody(message.body),
-                complete: this.hasCompleted
+                complete: this.hasCompleted,
+                chunkId: chunkId ?? 0
             })
 
         if (this.hasCompleted)
@@ -89,7 +88,7 @@ class WsRequestWrapper implements WsRequest {
     }
 
     private finalize() {
-        if(this._state === 'pending')
+        if (this._state === 'pending')
             throw new Error("Request is still pending")
 
         if (this._state === 'error') {
@@ -126,6 +125,7 @@ export interface WsRequestResult {
 }
 
 export interface WsResponseChunk {
+    chunkId: number;
     content: string
     complete: boolean
 }
@@ -190,6 +190,9 @@ class MessageManager implements IMessageManager {
 
     dispose(): void {
         this._messageStream.onMessage = undefined
+        this._currentPrompt = undefined
+        this._inboxBuffer.length = 0
+        this._outboxBuffer.length = 0
         this.endLoop()
     }
 
@@ -201,14 +204,24 @@ class MessageManager implements IMessageManager {
             if (outMessage) {
                 this._messageStream.sendMessage(outMessage)
             }
-            const inMessage = this._inboxBuffer.shift()
-            if (inMessage) {
-                if (this._currentPrompt && this._currentPrompt.id === getHeader(inMessage.headers, 'id')) {
+            for (let i = 0; i < this._inboxBuffer.length; i++) {
+                const inMessage = this._inboxBuffer[i]
+                if (!inMessage) continue
+                const messageId = getRequestId(inMessage.headers)
+                const isPartial = isPartialResponse(inMessage.headers)
+                const body = getBody(inMessage.body)
+                const chunkId = getChunkId(inMessage.headers)
+                console.log(`Processing message: ${messageId} - ${isPartial ? 'PARTIAL' : 'FULL'} - ${chunkId} - ${body}`)
+
+                if (this._currentPrompt && this._currentPrompt.id === messageId) {
                     this._currentPrompt.onMessage(inMessage)
                     if (this._currentPrompt.hasCompleted)
                         this._currentPrompt = undefined
                 }
             }
+
+            this._inboxBuffer.length = 0
+
         }, this.loopTimeout)
     }
 

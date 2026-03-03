@@ -122,14 +122,11 @@ class WebSocketManager implements IWebSocketManager, IMessageStream {
             }
 
             this._ws.onmessage = async (e: MessageEvent<any>) => {
-                console.log(`Received message: ${e.type}`)
                 const buffer = e.data instanceof Blob
                     ? await e.data.arrayBuffer()
                     : e.data;
                 const uintArray = new Uint8Array(buffer)
-                console.log(`Received data size: ${uintArray.length}`)
                 const bb = new flatbuffers.ByteBuffer(uintArray);
-
                 const message = Message.getRootAsMessage(bb).unpack();
                 if (this.onMessage) this.onMessage(message)
             }

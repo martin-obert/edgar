@@ -107,7 +107,7 @@ export const createPromptCommand = (ms: IMessageManager, ws: IWebSocketManager) 
             try {
                 const request = ms.sendPromptRequest(command.substring(1), {
                     onResponse: (r) => {
-                        buffer.write(r.content, {append: true})
+                        buffer.write(r.content, {append: r.chunkId > 0})
                     }
                 })
 
