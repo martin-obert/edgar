@@ -1,10 +1,8 @@
 import type {Router} from "vue-router";
 import {type Ref} from "vue";
-import type {IWebSocketManager} from "./websocket-manager.ts";
+import {type IWebSocketManager, WebSocketState} from "./websocket-manager.ts";
 import type {TerminalOutputBuffer} from "./terminalBuffer.ts";
-import {MessageT} from "./generated/edgar/message.ts";
-import {Builder} from "flatbuffers";
-import {HeaderValueT} from "./generated/edgar/header-value.ts";
+import {type IMessageManager} from "./message-manager.ts";
 
 export interface TerminalMessage {
     type: 'in' | 'out',
@@ -26,12 +24,30 @@ export interface TerminalCommand {
     abort?: () => void | Promise<void>;
 }
 
-export const createPlayCommand = (router: Router) => {
+export const createPlayCommand = (router: Router, ws: IWebSocketManager) => {
     return {
         name: "play",
         canProcess: (val) => val.startsWith('play'),
         description: "Play the game",
-        execute: async (_) => {
+        execute: async ({buffer, cancellationToken}) => {
+            const timeout = 1500
+            const reconnectionAttempts = 10
+            buffer.write("Connecting...")
+            for (let i = 0; i < reconnectionAttempts; i++) {
+                if (cancellationToken.aborted) return
+                try {
+                    await ws.connectAsync(timeout, cancellationToken)
+                    buffer.write("Connected")
+                    break
+                } catch (e) {
+                    if (cancellationToken.aborted) {
+                        buffer.write("Connection aborted")
+                        return
+                    }
+                    buffer.write(`Reconnecting ${i + 1}/${reconnectionAttempts}...`)
+                    await new Promise(resolve => setTimeout(resolve, timeout))
+                }
+            }
             await router.push('/game')
         }
     } as TerminalCommand
@@ -61,34 +77,6 @@ export const createHelpCommand: (commands: TerminalCommand[]) => TerminalCommand
     } as TerminalCommand
 }
 
-export const createConnectCommand = (ws: IWebSocketManager) => {
-    return {
-        name: "connect",
-        canProcess: (val) => val.startsWith('connect'),
-        description: "Connect to the server",
-        execute: async ({buffer, cancellationToken}) => {
-            const timeout = 1500
-            const reconnectionAttempts = 10
-            buffer.write("Connecting...")
-            for (let i = 0; i < reconnectionAttempts; i++) {
-                if (cancellationToken.aborted) return
-                try {
-                    await ws.connectAsync(timeout, cancellationToken)
-                    buffer.write("Connected")
-                    return
-                } catch (e) {
-                    if (cancellationToken.aborted) {
-                        buffer.write("Connection aborted")
-                        return
-                    }
-                    buffer.write(`Reconnecting ${i + 1}/${reconnectionAttempts}...`)
-                    await new Promise(resolve => setTimeout(resolve, timeout))
-                }
-            }
-        }
-    } as TerminalCommand
-}
-
 export const createLoremCommand = () => {
     return {
         name: "lorem",
@@ -101,21 +89,66 @@ export const createLoremCommand = () => {
 }
 
 
-export const createPromptCommand = (ws: IWebSocketManager) => {
+export const createPromptCommand = (ms: IMessageManager, ws: IWebSocketManager) => {
     return {
         name: "prompt",
         canProcess: (val) => val.startsWith(':'),
         description: "Prompt E.D.G.A.R.s",
-        execute: async ({command}) => {
-            const r = new MessageT();
-            const b = new Builder(0)
-            r.headers = [
-                new HeaderValueT("id", "1")
-            ]
-            r.body = Array.from(new TextEncoder().encode(command.substring(1)));
-            b.finish(r.pack(b))
-            const data = b.asUint8Array()
-            await ws.sendAsync(data)
+        execute: async ({command, buffer, cancellationToken}) => {
+            if (ws.state === WebSocketState.CLOSED || ws.state === WebSocketState.CLOSING || ws.state === WebSocketState.UNSET) {
+                const result = await connectProcedure(ws, {buffer, cancellationToken, command})
+                if (!result) {
+                    buffer.write("Unable to process prompt, no connection to E.D.G.A.R. available. Please try again later.")
+                    return
+                }
+            }
+            try {
+                const request = ms.sendPromptRequest(command.substring(1), {
+                    onResponse: (r) => {
+                        buffer.write(r.content)
+                    }
+                })
+
+                await request.wait(3000)
+
+                console.log("Sent prompt", request.id)
+            } catch (e) {
+                buffer.write("Error sending prompt: " + e)
+                console.error(e)
+            }
         }
     } as TerminalCommand
+}
+
+export const createExitCommand = (router: Router, route: string) => {
+    return {
+        name: "exit",
+        canProcess: (val) => val === 'q' || val === 'exit',
+        description: "Exit E.D.G.A.R.",
+        execute: async (_) => {
+            await router.push(route)
+        }
+    } as TerminalCommand
+}
+
+const connectProcedure = async (ws: IWebSocketManager, {cancellationToken}: TerminalCommandContext) => {
+    const timeout = 1500
+    const reconnectionAttempts = 10
+    console.log("Connecting...")
+    for (let i = 0; i < reconnectionAttempts; i++) {
+        if (cancellationToken.aborted) return
+        try {
+            await ws.connectAsync(timeout, cancellationToken)
+            console.log("Connected")
+            return true
+        } catch (e) {
+            if (cancellationToken.aborted) {
+                console.log("Connection aborted")
+                break
+            }
+            console.log(`Reconnecting ${i + 1}/${reconnectionAttempts}...`)
+            await new Promise(resolve => setTimeout(resolve, timeout))
+        }
+    }
+    return false
 }

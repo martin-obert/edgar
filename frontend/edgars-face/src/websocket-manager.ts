@@ -1,5 +1,26 @@
-import {Message} from "./generated/edgar.ts";
+import {Message, MessageT} from "./generated/edgar.ts";
 import * as flatbuffers from "flatbuffers";
+import type {IMessageStream} from "./message-manager.ts";
+import {serializeMessage} from "./websocket-messaging.ts";
+
+export enum WsError {
+    UNINITIALIZED = 0,
+    INVALID_STATE = 1,
+}
+
+export class WebSocketManagerError extends Error {
+    private readonly _errorType: WsError;
+    get errorType() {
+        return this._errorType
+    }
+
+    constructor(message: string, errorType: WsError) {
+        super(message);
+        this.name = "WebSocketManagerError";
+        this._errorType = errorType;
+        Object.setPrototypeOf(this, WebSocketManagerError.prototype); // fix prototype chain
+    }
+}
 
 export interface IWebSocketManager {
     get state(): WebSocketState
@@ -8,7 +29,6 @@ export interface IWebSocketManager {
 
     disconnectAsync(code?: number, reason?: string): Promise<void>
 
-    sendAsync(data: Uint8Array): Promise<void>
 }
 
 export enum WebSocketState {
@@ -19,7 +39,7 @@ export enum WebSocketState {
     CLOSED = 3
 }
 
-class WebSocketManager implements IWebSocketManager {
+class WebSocketManager implements IWebSocketManager, IMessageStream {
     private readonly _baseUrl: string;
     private _ws: WebSocket | null = null;
 
@@ -33,15 +53,28 @@ class WebSocketManager implements IWebSocketManager {
         this._baseUrl = baseUrl;
     }
 
-    async sendAsync(data: Uint8Array): Promise<void> {
-        if (!this._ws)
-            throw new Error("WebSocket not set")
-        if (this.state !== WebSocketState.OPEN)
-            throw new Error("WebSocket is not open")
+    get canWrite(): boolean {
+        return this.state === WebSocketState.OPEN
+    }
 
+    get canRead(): boolean {
+        return this.state === WebSocketState.OPEN
+    }
+
+    sendMessage(message: MessageT) {
+        if (!this._ws)
+            throw new WebSocketManagerError("WebSocket not set", WsError.UNINITIALIZED)
+
+        if (this.state !== WebSocketState.OPEN)
+            throw new WebSocketManagerError(`Invalid state: ${this.state}`, WsError.INVALID_STATE)
+
+
+        const data = serializeMessage(message)
         console.log(`Sending data: ${data.length}`)
         this._ws.send(data)
     }
+
+    onMessage?: (message: MessageT) => void;
 
     async disconnectAsync(code?: number, reason?: string): Promise<void> {
         if (this._ws) {
@@ -87,16 +120,18 @@ class WebSocketManager implements IWebSocketManager {
                 console.log(`Connection closed: CODE - ${e.code}, REASON - ${e.reason}, WAS_CLEAN - ${e.wasClean}`)
                 reject(e)
             }
+
             this._ws.onmessage = async (e: MessageEvent<any>) => {
                 console.log(`Received message: ${e.type}`)
                 const buffer = e.data instanceof Blob
                     ? await e.data.arrayBuffer()
                     : e.data;
-                const array = new Uint8Array(buffer);
-                const bb = new flatbuffers.ByteBuffer(array);
+                const uintArray = new Uint8Array(buffer)
+                console.log(`Received data size: ${uintArray.length}`)
+                const bb = new flatbuffers.ByteBuffer(uintArray);
+
                 const message = Message.getRootAsMessage(bb).unpack();
-                const text = new TextDecoder().decode(new Uint8Array(message.body.map(b => b & 0xFF)));
-                console.log(text);
+                if (this.onMessage) this.onMessage(message)
             }
 
             setTimeout(async () => {
@@ -129,4 +164,4 @@ export const WebSocketStateToString = (state: WebSocketState) => {
     }
 }
 
-export const createWebSocketManager = (baseUrl: string): IWebSocketManager => new WebSocketManager(baseUrl)
+export const createWebSocketManager = (baseUrl: string): IWebSocketManager & IMessageStream => new WebSocketManager(baseUrl)
