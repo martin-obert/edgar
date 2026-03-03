@@ -10,6 +10,8 @@ from starlette.websockets import WebSocket
 import sys
 from pathlib import Path
 
+from typing_extensions import get_args
+
 sys.path.insert(0, str(Path(__file__).parent / "generated"))
 
 from generated.Edgar import Message
@@ -22,9 +24,10 @@ load_dotenv()  # reads variables from a .env file and sets them in os.environ
 class MessageHeaders:
     id: str
     is_partial: str
+    chunk_id: str
 
 
-known_headers = MessageHeaders(id="id", is_partial="partial-response")
+known_headers = MessageHeaders(id="id", is_partial="partial-response", chunk_id="chunk-id")
 
 
 def parse_message(b: bytes) -> Message.MessageT:
@@ -73,9 +76,9 @@ class TerminalRequest:
             self.__body = bytes(self.message.body).decode('utf-8')
         return self.__body
 
-    async def respond(self, message: str, is_partial: bool = False):
+    async def respond(self, message: str, headers: dict[str, str]):
         data = message.encode('utf-8')
-        bytes_data = create_message(data, {known_headers.id: self.id, known_headers.is_partial: str(is_partial)})
+        bytes_data = create_message(data, headers)
         print(
             f"Sending message with id {self.id} to websocket: {len(bytes_data)}"
         )
@@ -102,6 +105,7 @@ app.add_middleware(
 
 
 async def send_prompt(val: str, request: TerminalRequest):
+    idx = 0
     async with httpx.AsyncClient() as client:
         url = f"{getenv("API_BASE_URL")}/api/generate"
         print(url)
@@ -115,10 +119,24 @@ async def send_prompt(val: str, request: TerminalRequest):
             async for line in r.aiter_lines():
                 chunk = json.loads(line)
                 print(chunk["response"])
-                if chunk.get('done'):
-                    await request.respond("")
+
+                is_done = chunk.get('done')
+
+                is_partial: str
+                if is_done:
+                    is_partial = str(False)
+                else:
+                    is_partial = str(True)
+
+                await request.respond(chunk["response"], {
+                    known_headers.chunk_id: idx,
+                    known_headers.is_partial: is_partial,
+                    known_headers.id: request.id
+                })
+
+                if is_done:
                     break
-                await request.respond(chunk["response"], True)
+                idx += 1
 
             r.raise_for_status()
 

@@ -19,6 +19,12 @@ export const isPartialResponse = (headers: HeaderValueT[]) => {
     return val.toLowerCase() === 'true' || val === '1'
 }
 
+export const chunkId = (headers: HeaderValueT[]) : number | undefined => {
+    const n = getHeader(headers, 'chunk-id')
+    if(!n) return undefined
+    return parseInt(n)
+}
+
 export const getRequestId = (headers: HeaderValueT[]) => {
     return getHeader(headers, 'id')
 }

@@ -46,10 +46,19 @@ export function useTerminalBuffer(lineWidth: number = 50): TerminalOutputBuffer 
 
     function write(message: string, options?: { append: boolean }) {
         if (options?.append) {
-            message = array[array.length - 1] + message
+
+            const split = smartSplit(array[array.length - 1] + message, lineWidth)
+
+            array[array.length - 1] = split[0]!
+
+            if (split.length > 1) {
+                array.push(...split.slice(1))
+                triggerLength()
+            }
+        } else {
+            array.push(...smartSplit(message, lineWidth))
+            triggerLength()
         }
-        array.push(...smartSplit(message, lineWidth))
-        triggerLength()
         triggerItems()
     }
 
