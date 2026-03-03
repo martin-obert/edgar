@@ -1,45 +1,4 @@
 <script setup lang="ts">
-
-// import {onMounted, onUnmounted, ref} from "vue";
-// import {Request, RequestT} from "../generated/edgar.ts";
-// import {Builder, ByteBuffer} from "flatbuffers";
-//
-// const received = ref<string | null>()
-// const input = ref<string | null>()
-// const ws = ref<WebSocket | null>()
-// onMounted(() => {
-//   const wSocket = new WebSocket("ws://127.0.0.1:8000/ws");
-//   wSocket.onopen = () => {
-//     console.log("Connection opened");
-//   }
-//   wSocket.onclose = () => {
-//     console.log("Connection closed");
-//   }
-//   wSocket.onmessage = async (e: MessageEvent) => {
-//     console.log(`Received message: ${e.type}`);
-//     const arrayBuffer = await e.data.arrayBuffer();
-//     const buf = new ByteBuffer(new Uint8Array(arrayBuffer));
-//     const req = Request.getRootAsRequest(buf);
-//     received.value = new TextDecoder().decode(req.bodyArray());
-//   }
-//   wSocket.onerror = (e: Event) => {
-//     console.log(`Received message: ${e.type}`);
-//   }
-//
-//   ws.value = wSocket
-// })
-//
-// onUnmounted(() => {
-//   if (ws.value) ws.value.close()
-// })
-//
-// const send = () => {
-//   const r = new RequestT();
-//   const b = new Builder(256)
-//   b.finish(r.pack(b))
-//   ws.value!.send(b.asUint8Array())
-// }
-
 import {nextTick, onMounted, ref, watch} from "vue";
 import CypherSentence from "../components/CypherSentence.vue";
 import {
@@ -50,20 +9,18 @@ import {
 } from "../commands.ts";
 import {useTerminalBuffer} from "../terminalBuffer.ts";
 import {onKeyStroke} from "@vueuse/core";
+import {useConnectionStore} from "../stores/connection.store.ts";
+import {WebSocketState} from "../websocket-manager.ts";
 
-const {commands, startup} = defineProps<{ commands: TerminalCommand[], startup?: string }>()
+const {commands} = defineProps<{ commands: TerminalCommand[] }>()
 const messages = ref<TerminalMessage[]>([])
 const commandInput = ref<HTMLInputElement | null>(null)
 const messageStackSize = 5
 const lineLen = 100
-
 onMounted(() => {
   if (commandInput.value) {
     commandInput.value.focus()
   }
-
-  if (startup)
-    executeCommand(startup, {push: false})
 })
 
 const c = [
@@ -81,10 +38,10 @@ const pushMessage = (message: TerminalMessage) => {
 }
 const outBuffer = useTerminalBuffer()
 const abortController = ref<AbortController>(new AbortController())
+const currentCommand = ref<TerminalCommand | undefined>()
 const renderingBuffer = ref(false)
-const executeCommand = async (value: string, options?: { push?: boolean }) => {
-  if (options && options.push)
-    pushMessage({value: value, type: 'in'})
+const executeCommand = async (value: string) => {
+  pushMessage({value: value, type: 'in'})
 
   if (commandInput.value)
     commandInput.value.value = ""
@@ -92,15 +49,19 @@ const executeCommand = async (value: string, options?: { push?: boolean }) => {
   const commandSaturated = value.trim()
   if (commandSaturated.length === 0) return
 
-  const handler = internalCommands.value.find(command => command.name === commandSaturated)
-  if (handler) {
-    await handler.execute({
-      buffer: outBuffer,
-      cancellationToken: abortController.value.signal,
-    })
-
+  currentCommand.value = internalCommands.value.find(command => command.canProcess(commandSaturated))
+  if (currentCommand.value) {
+    try {
+      await currentCommand.value.execute({
+        buffer: outBuffer,
+        cancellationToken: abortController.value.signal,
+        command: commandSaturated
+      })
+    } finally {
+      currentCommand.value = undefined
+    }
   } else {
-    pushMessage({value: `Unknown command: ${commandSaturated}, /help`, type: 'out'})
+    pushMessage({value: `Unknown command: ${commandSaturated}, help`, type: 'out'})
   }
 }
 
@@ -111,25 +72,38 @@ const popBuffer = () => {
 }
 
 const cypher = ref<string | undefined>(undefined)
-watch(outBuffer.items, async (items) => {
-  cypher.value = undefined
 
-  await nextTick(() => {
-    if (items.length > 0) {
-      renderingBuffer.value = true
-      cypher.value = items[0]
-    } else {
-      if (renderingBuffer.value)
-        renderingBuffer.value = false
-      commandInput.value?.focus()
+watch(outBuffer.items, async (items) => {
+  if (items.length > 0) {
+    if (items[0] !== cypher.value) {
+      cypher.value = undefined
+      await nextTick(() => {
+        if (items.length > 0) {
+          renderingBuffer.value = true
+          cypher.value = items[0]
+        } else {
+          if (renderingBuffer.value)
+            renderingBuffer.value = false
+          commandInput.value?.focus()
+          cypher.value = undefined
+        }
+      })
     }
-  })
+  } else {
+    if (renderingBuffer.value)
+      renderingBuffer.value = false
+    cypher.value = undefined
+    commandInput.value?.focus()
+  }
+
 })
 
 onKeyStroke('Escape', (e) => {
   e.preventDefault()
   abortController.value.abort()
   abortController.value = new AbortController()
+  if (cypher.value)
+    messages.value.push({value: cypher.value, type: 'out'})
   outBuffer.clear()
 })
 </script>
@@ -147,10 +121,13 @@ onKeyStroke('Escape', (e) => {
               {{ message.value }}<br></span>
               <CypherSentence v-if="cypher" :sentence="cypher" @done="popBuffer"/>
             </p>
-            <input name="commandInput" v-if="!renderingBuffer" ref="commandInput"
+            <i style="margin: 0 1ch 0 -2ch;">&gt;</i>
+            <input name="commandInput"
+                   v-if="!renderingBuffer && !currentCommand"
+                   ref="commandInput"
                    v-on:keyup.enter="executeCommand(($event.target as HTMLInputElement).value)"/>
           </div>
-          <div v-if="renderingBuffer"><p style="margin: 0;">Processing ... (ESC)</p></div>
+          <div v-if="renderingBuffer || currentCommand"><p style="margin: 0;">Processing ... (ESC)</p></div>
           <div v-else>&nbsp;</div>
         </div>
         <div class="vignette"></div>
@@ -179,4 +156,5 @@ onKeyStroke('Escape', (e) => {
   padding: 0;
   margin: 0;
 }
+
 </style>

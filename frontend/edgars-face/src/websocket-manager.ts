@@ -1,15 +1,34 @@
+import {Message, MessageT} from "./generated/edgar.ts";
+import * as flatbuffers from "flatbuffers";
+import type {IMessageStream} from "./message-manager.ts";
+import {serializeMessage} from "./websocket-messaging.ts";
+
+export enum WsError {
+    UNINITIALIZED = 0,
+    INVALID_STATE = 1,
+}
+
+export class WebSocketManagerError extends Error {
+    private readonly _errorType: WsError;
+    get errorType() {
+        return this._errorType
+    }
+
+    constructor(message: string, errorType: WsError) {
+        super(message);
+        this.name = "WebSocketManagerError";
+        this._errorType = errorType;
+        Object.setPrototypeOf(this, WebSocketManagerError.prototype); // fix prototype chain
+    }
+}
+
 export interface IWebSocketManager {
     get state(): WebSocketState
 
-    connectAsync(reset?: boolean): Promise<void>
+    connectAsync(timeout: number, cancellationToken: AbortSignal): Promise<void>
 
     disconnectAsync(code?: number, reason?: string): Promise<void>
 
-    sendAsync(data: Uint8Array): Promise<void>
-
-    autoReconnect: boolean
-
-    reset(): Promise<void>
 }
 
 export enum WebSocketState {
@@ -20,11 +39,9 @@ export enum WebSocketState {
     CLOSED = 3
 }
 
-class WebSocketManager implements IWebSocketManager {
+class WebSocketManager implements IWebSocketManager, IMessageStream {
     private readonly _baseUrl: string;
     private _ws: WebSocket | null = null;
-    private _reconnectFncHandle: number | null = null;
-    private _reconnectAttemptsBudget: number = 0;
 
     private _stateInternal: WebSocketState = WebSocketState.UNSET
 
@@ -32,26 +49,36 @@ class WebSocketManager implements IWebSocketManager {
         return this._stateInternal
     }
 
-    constructor(baseUrl: string, private readonly options: { timeout?: number, retryAttempts?: number } = {
-        timeout: 1000,
-        retryAttempts: 3
-    }) {
+    constructor(baseUrl: string) {
         this._baseUrl = baseUrl;
-        this._reconnectAttemptsBudget = options.retryAttempts ?? 3;
     }
 
-    autoReconnect: boolean = false
-
-    async reset(): Promise<void> {
-        this._reconnectAttemptsBudget = this.options.retryAttempts ?? 3;
+    get canWrite(): boolean {
+        return this.state === WebSocketState.OPEN
     }
 
-    sendAsync(data: Uint8Array): Promise<void> {
-        throw new Error("Method not implemented.");
+    get canRead(): boolean {
+        return this.state === WebSocketState.OPEN
     }
+
+    sendMessage(message: MessageT) {
+        if (!this._ws)
+            throw new WebSocketManagerError("WebSocket not set", WsError.UNINITIALIZED)
+
+        if (this.state !== WebSocketState.OPEN)
+            throw new WebSocketManagerError(`Invalid state: ${this.state}`, WsError.INVALID_STATE)
+
+
+        const data = serializeMessage(message)
+        console.log(`Sending data: ${data.length}`)
+        this._ws.send(data)
+    }
+
+    onMessage?: (message: MessageT) => void;
 
     async disconnectAsync(code?: number, reason?: string): Promise<void> {
         if (this._ws) {
+            console.log(`Disconnecting from: ${this._baseUrl}`)
             this._ws.close(code, reason)
         }
         this._ws = null
@@ -59,69 +86,60 @@ class WebSocketManager implements IWebSocketManager {
         this._updateState()
     }
 
-    private stopReconnectFnc() {
-        if (this._reconnectFncHandle) {
-            window.clearTimeout(this._reconnectFncHandle)
-            this._reconnectFncHandle = null
-        }
-    }
-
     private _updateState() {
 
         this._stateInternal = this._ws?.readyState as WebSocketState ?? WebSocketState.UNSET
     }
 
-    private _setReconnectFnc() {
-        if (this._reconnectFncHandle) {
-            this.stopReconnectFnc()
-        }
-        this._reconnectFncHandle = window.setTimeout(async () => {
-            this._reconnectAttemptsBudget--
-            await this.connectAsync()
-            if (this._reconnectAttemptsBudget <= 0) {
-                this._reconnectAttemptsBudget = 0
-                if (this.autoReconnect) return
-                await this.disconnectAsync()
-                this.stopReconnectFnc()
-            }
-        }, this.options.timeout)
-    }
-
-    async connectAsync(reset: boolean = false): Promise<void> {
+    async connectAsync(timeout: number, cancellationSignal: AbortSignal): Promise<void> {
         await this.disconnectAsync()
 
-        if (reset) await this.reset()
+        cancellationSignal.addEventListener('abort', async () => {
+            // await this.disconnectAsync()
+        })
 
-        if (this._ws) throw new Error("WebSocket not reset")
+        return new Promise<void>((resolve, reject) => {
+            console.log(`Connecting to: ${this._baseUrl}`)
 
-        this._updateState()
-        this._ws = new WebSocket(this._baseUrl)
-        this._updateState()
-        this._setReconnectFnc()
+            if (this._ws) throw new Error("WebSocket not reset")
 
-        this._ws.onopen = (e: Event) => {
-            this.stopReconnectFnc()
             this._updateState()
-            console.log(`Connection opened: ${e.type} - ${this._ws?.readyState}`)
-        }
-        this._ws.onerror = (e: Event) => {
-
-            console.log(`Connection error: ${e.type}`)
-        }
-        this._ws.onclose = (e: CloseEvent) => {
+            this._ws = new WebSocket(this._baseUrl)
             this._updateState()
-            if (e.code === 1012 || e.code === 1013) {
-                if (this.autoReconnect) {
-                    this.connectAsync()
+
+            this._ws.onopen = (e: Event) => {
+                this._updateState()
+                console.log(`Connection opened: ${e.type} - ${this._ws?.readyState}`)
+                resolve()
+            }
+            this._ws.onerror = (e: Event) => {
+                console.log(`Connection error: ${e.type}`)
+            }
+            this._ws.onclose = (e: CloseEvent) => {
+                this._updateState()
+                console.log(`Connection closed: CODE - ${e.code}, REASON - ${e.reason}, WAS_CLEAN - ${e.wasClean}`)
+                reject(e)
+            }
+
+            this._ws.onmessage = async (e: MessageEvent<any>) => {
+                const buffer = e.data instanceof Blob
+                    ? await e.data.arrayBuffer()
+                    : e.data;
+                const uintArray = new Uint8Array(buffer)
+                const bb = new flatbuffers.ByteBuffer(uintArray);
+                const message = Message.getRootAsMessage(bb).unpack();
+                if (this.onMessage) this.onMessage(message)
+            }
+
+            setTimeout(async () => {
+                if (this.state === WebSocketState.OPEN || cancellationSignal.aborted) {
                     return
                 }
-            }
-            console.log(`Connection closed: CODE - ${e.code}, REASON - ${e.reason}, WAS_CLEAN - ${e.wasClean}`)
-        }
-        this._ws.onmessage = (e: MessageEvent<any>) => {
-            console.log(`Received message: ${e.type}`)
-            this._stateInternal = WebSocketState.CLOSED
-        }
+                console.log("Connection timeout")
+                await this.disconnectAsync()
+                reject(new Error("Connection timeout"))
+            }, timeout)
+        })
     }
 
 }
@@ -143,4 +161,4 @@ export const WebSocketStateToString = (state: WebSocketState) => {
     }
 }
 
-export const createWebSocketManager = (baseUrl: string): IWebSocketManager => new WebSocketManager(baseUrl)
+export const createWebSocketManager = (baseUrl: string): IWebSocketManager & IMessageStream => new WebSocketManager(baseUrl)

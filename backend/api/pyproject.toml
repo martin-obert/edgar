@@ -7,5 +7,6 @@ dependencies = [
     "fastapi>=0.133.1",
     "uvicorn[standard]",
     "python-dotenv>=1.2.1",
-    "flatbuffers>=25.12.19"
+    "flatbuffers>=25.12.19",
+    "httpx>=0.28.1",
 ]
