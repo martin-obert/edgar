@@ -4,6 +4,7 @@ import EdgarsTerminal from "../components/EdgarsTerminal.vue";
 import {createExitCommand, createPromptCommand} from "../commands.ts";
 import {onMounted, onUnmounted} from "vue";
 import {useRouter} from "vue-router";
+import SessionConfiguration from "../components/SessionConfiguration.vue";
 
 const {sessionId} = defineProps<{ sessionId: string }>()
 
@@ -25,11 +26,7 @@ onUnmounted(() => {
 <template>
   <div>
     <EdgarsTerminal :commands="gameCommands"/>
-    <!--    <sub>{{ WebSocketStateToString(connectionStore.connectionState) }}</sub>-->
-    <!--    <div v-if="connectionStore.connectionState === WebSocketState.UNSET || connectionStore.connectionState === WebSocketState.CLOSED">-->
-    <!--      <Button label="Reconnect" @click="reconnect"/>-->
-    <!--      <ToggleSwitch v-model="connectionStore.ws.autoReconnect"/>-->
-    <!--    </div>-->
+    <SessionConfiguration :sessionId="sessionId"/>
   </div>
 </template>
 

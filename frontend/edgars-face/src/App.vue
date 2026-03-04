@@ -28,6 +28,7 @@ const items = ref<MenuItem[]>([
   <RouterView>
 
   </RouterView>
+  <Toast />
 </template>
 
 <style scoped>
