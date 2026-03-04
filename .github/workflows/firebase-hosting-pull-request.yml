@@ -22,3 +22,4 @@ jobs:
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_OBERT_E9D65 }}
           projectId: obert-e9d65
           entryPoint: frontend/edgars-face
+          channelId: live
