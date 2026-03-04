@@ -78,5 +78,6 @@ jobs:
             docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.tag }}
             docker run -d --name edgar-api --network host -p 8000:8000 \
               --env-file /home/${{ secrets.SSH_USER }}/edgar/.env \
+              -v /mnt/tb_hdd/edgar/user_sessions:/app/user_sessions \
               ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.tag }}
           COMMANDS

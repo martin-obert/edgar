@@ -6,11 +6,14 @@ import {createMessageManager} from "../message-manager.ts";
 import {createRestApi} from "../rest.api.ts";
 
 export const useBackendStore = defineStore('backend', () => {
-    const ws = createWebSocketManager(envVariables.WS_URL())
+    debugger
+    const wsUrl = envVariables.WS_URL()
+    const ws = createWebSocketManager(wsUrl)
     const connectionState = computed(() => {
         return ws.state;
     })
     const ms = createMessageManager(ws)
-    const rest= createRestApi(envVariables.API_URL())
+    const apiUrl = envVariables.API_URL()
+    const rest= createRestApi(apiUrl)
     return {ws, connectionState, ms, rest}
 })
