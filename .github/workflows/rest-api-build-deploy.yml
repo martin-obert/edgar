@@ -76,5 +76,7 @@ jobs:
             sudo docker stop edgar-api || true
             sudo docker rm edgar-api || true
             sudo docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.tag }}
-            sudo docker run -d --name edgar-api -p 8000:8000 ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.tag }}
+            sudo docker run -d --name edgar-api -p 8000:8000 \
+              --env-file /home/${{ secrets.SSH_USER }}/edgar/.env \
+              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.tag }}
           COMMANDS
