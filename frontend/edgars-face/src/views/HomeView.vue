@@ -44,9 +44,9 @@ import {useRouter} from "vue-router";
 import {ref} from "vue";
 import {createLoremCommand, createPlayCommand, type TerminalCommand} from "../commands.ts";
 import EdgarsTerminal from "../components/EdgarsTerminal.vue";
-import {useConnectionStore} from "../stores/connection.store.ts";
+import {useBackendStore} from "../stores/backend.store.ts";
 
-const connection = useConnectionStore()
+const connection = useBackendStore()
 const commands = ref<TerminalCommand[]>([createPlayCommand(useRouter(), connection.ws), createLoremCommand()])
 </script>
 

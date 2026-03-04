@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import {useConnectionStore} from "./stores/connection.store.ts";
+import {useBackendStore} from "./stores/backend.store.ts";
 import type {MenuItem} from "primevue/menuitem";
 import {ref} from "vue";
 import {WebSocketStateToString} from "./websocket-manager.ts";
 
-const connectionStore = useConnectionStore()
+const connectionStore = useBackendStore()
 
 const items = ref<MenuItem[]>([
   {

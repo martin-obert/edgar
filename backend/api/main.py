@@ -35,6 +35,8 @@ class MessageHeaders:
 
 known_headers = MessageHeaders(id="id", is_partial="partial-response", chunk_id="chunk-id")
 
+active_sessions: dict[UUID, sessions.SessionManager] = {}
+
 
 def parse_message(b: bytes) -> Message.MessageT:
     message = Message.Message.GetRootAs(b, 0)
@@ -115,6 +117,7 @@ async def send_prompt(val: str, request: TerminalRequest, session_manager: sessi
         base_url = getenv("API_BASE_URL")
         url = f"{base_url}/api/chat"
         logger.info(f"Sending request to {url}")
+        chat = [m.model_dump() for m in session_manager.chat_messages]
         async  with client.stream('POST', url,
                                   headers={
                                       'Content-Type': 'application/json',
@@ -122,10 +125,13 @@ async def send_prompt(val: str, request: TerminalRequest, session_manager: sessi
                                       'CF-Access-Client-Secret': getenv("CF_ACCESS_CLIENT_SECRET")
                                   },
                                   json={
-                                      'model': session_manager.session_model,
-                                      'messages': [m.model_dump() for m in session_manager.chat_messages],
-                                      'stream': True}) as r:
-
+                                      'model': session_manager.configuration.model,
+                                      'messages': [
+                                          {'role': 'system', 'content': session_manager.configuration.system_prompt},
+                                          *chat
+                                      ],
+                                      'stream': True
+                                  }) as r:
             logger.info(f"Response status: {r.status_code}")
 
             r.raise_for_status()
@@ -171,19 +177,35 @@ async def healthz():
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    session_id = UUID(websocket.query_params.get("session_id"))
+    logger.info(f"Websocket connected with session_id: {session_id}")
+    session_manager = active_sessions.get(session_id, sessions.SessionManager(session_id=session_id))
     try:
-        session_id = UUID(websocket.query_params.get("session_id"))
-
-        logger.info(f"Websocket connected with session_id: {session_id}")
-        with sessions.SessionManager(session_id=session_id) as session_manager:
-            await websocket.accept()
-            logger.info("Websocket connected")
-            while True:
-                logger.info("Waiting for message")
-                b = await websocket.receive_bytes()
-                logger.info("Received message")
-                message = parse_message(b)
-                req = TerminalRequest(message, websocket)
-                await send_prompt(req.body, req, session_manager)
+        active_sessions[session_id] = session_manager
+        await websocket.accept()
+        logger.info("Websocket connected")
+        while True:
+            logger.info("Waiting for message")
+            b = await websocket.receive_bytes()
+            logger.info("Received message")
+            message = parse_message(b)
+            req = TerminalRequest(message, websocket)
+            await send_prompt(req.body, req, session_manager)
     except Exception as e:
         logger.error(f"Error: {e}")
+    finally:
+        session_manager.save_chat()
+        active_sessions.pop(session_id)
+
+
+@app.put("/api/v1/sessions/{session_id}/configuration")
+async def update_session_configuration(session_id: UUID, configuration: sessions.SessionConfig):
+    return (active_sessions.get(session_id, sessions.SessionManager(session_id=session_id))
+            .update_configuration(configuration)
+            .save_config()
+            .configuration)
+
+
+@app.get("/api/v1/sessions/{session_id}/configuration")
+async def get_session_configuration(session_id: UUID):
+    return active_sessions.get(session_id, sessions.SessionManager(session_id=session_id)).configuration
