@@ -16,7 +16,6 @@ logger = logging.getLogger("api")
 
 
 sys.path.insert(0, str(Path(__file__).parent / "generated"))
-
 from generated.Edgar import Message
 from generated.Edgar.HeaderValue import HeaderValueT
 
@@ -82,7 +81,7 @@ class TerminalRequest:
     async def respond(self, message: str, headers: dict[str, str]):
         data = message.encode('utf-8')
         bytes_data = create_message(data, headers)
-        print(
+        logger.info(
             f"Sending message with id {self.id} to websocket: {len(bytes_data)}"
         )
         await self.websocket.send_bytes(bytes_data)
@@ -110,8 +109,8 @@ app.add_middleware(
 async def send_prompt(val: str, request: TerminalRequest):
     idx = 0
     async with httpx.AsyncClient() as client:
-        url = f"{getenv("API_BASE_URL")}/api/generate"
-        print(url)
+        base_url = getenv("API_BASE_URL")
+        url = f"{base_url}/api/generate"
         async  with client.stream('POST', url,
                                   headers={
                                       'Content-Type': 'application/json',
@@ -121,8 +120,6 @@ async def send_prompt(val: str, request: TerminalRequest):
                                   json={'model': 'qwen2.5:3b', 'prompt': val, 'stream': True}) as r:
             async for line in r.aiter_lines():
                 chunk = json.loads(line)
-                print(chunk["response"])
-
                 is_done = chunk.get('done')
 
                 is_partial: str
@@ -143,6 +140,9 @@ async def send_prompt(val: str, request: TerminalRequest):
 
             r.raise_for_status()
 
+@app.get("/healthz", include_in_schema=False)
+async def healthz():
+    return {"status": "ok"}
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -159,4 +159,4 @@ async def websocket_endpoint(websocket: WebSocket):
             await send_prompt(req.body, req)
             manager.complete(req.id)
     except Exception as e:
-        print(e)
+        logger.error(f"Error: {e}")
