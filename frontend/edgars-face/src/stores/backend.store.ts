@@ -3,12 +3,14 @@ import {createWebSocketManager} from "../websocket-manager.ts";
 import envVariables from "../environment.ts";
 import {computed} from "vue";
 import {createMessageManager} from "../message-manager.ts";
+import {createRestApi} from "../rest.api.ts";
 
-export const useConnectionStore = defineStore('connection', () => {
-    const ws = createWebSocketManager(envVariables.WS_URL)
+export const useBackendStore = defineStore('backend', () => {
+    const ws = createWebSocketManager(envVariables.WS_URL())
     const connectionState = computed(() => {
         return ws.state;
     })
     const ms = createMessageManager(ws)
-    return {ws, connectionState, ms}
+    const rest= createRestApi(envVariables.API_URL())
+    return {ws, connectionState, ms, rest}
 })

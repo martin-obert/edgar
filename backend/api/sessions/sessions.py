@@ -2,7 +2,7 @@
 import logging
 
 import uuid
-from pydantic import BaseModel
+from pydantic import BaseModel, TypeAdapter
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("api/sessions")
@@ -11,63 +11,96 @@ logger = logging.getLogger("api/sessions")
 class ChatMessage(BaseModel):
     role: str
     content: str
+    thinking: str | None = None
 
 
 class SessionConfig(BaseModel):
     model: str
+    system_prompt: str | None = None
 
 
-class Session(BaseModel):
-    id: str
-    chats: list[ChatMessage]
-    config: SessionConfig
+default_session_configuration = SessionConfig(model='qwen2.5:3b', system_prompt='You are a helpful assistant.')
+adapter = TypeAdapter(list[ChatMessage])
 
 
 class SessionManager:
     def __init__(self, session_id: uuid.UUID):
         self._session_id = session_id
-        m_dir = self._get_sessions_dir()
-        self._filepath = f"{m_dir}/{self._session_id.hex}.json"
-        self._session: Session | None = None
+        self._chat_messages: list[ChatMessage] | None = None
+        self._config: SessionConfig | None = None
+        self._chat_file = self._get_root_dir() / f"{session_id}_chat.json"
+        self._config_file = self._get_root_dir() / f"{session_id}_config.json"
 
     @property
-    def session_model(self):
-        return self._session.config.model
+    def configuration(self):
+        return self._load_config()._config
 
     @property
     def chat_messages(self):
-        return self._session.chats
+        return self._load_chat()._chat_messages
 
-    def __enter__(self):
-        logger.info(f"Opening session file: {self._filepath}")
-
-        Path(self._filepath).touch(exist_ok=True)
-
-        with open(self._filepath, "r+") as f:
-            logger.info(f"Reading session file: {self._filepath}")
-            content = f.read()  # read everything
-            if content:
-                self._session = Session.model_validate_json(content)
-            else:
-                self._session = Session(id=str(self._session_id), chats=[], config=SessionConfig(model='qwen2.5:3b'))
-
+    def update_configuration(self, config: SessionConfig):
+        self._config = config
         return self
 
-    def __exit__(self, exc_type, exc_value, traceback):
-        logger.info(f"Closing session file: {self._filepath}")
-        if self._session:
-            logger.info(f"Saving session file: {self._filepath}")
-            with open(self._filepath, "w") as f:
-                f.write(self._session.model_dump_json())
-            logger.info(f"Session file saved: {self._filepath}")
+    def _get_chat_file_name(self):
+        return f"{self._get_root_dir()}{self._session_id}_chat_log.json"
 
-        return False
+    def _get_config_file_name(self):
+        return f"{self._get_root_dir()}{self._session_id}_config.json"
+
+    def _load_config(self):
+        if self._config:
+            return self
+
+        if not self._config_file.exists():
+            self._config = default_session_configuration
+            return self
+
+        with open(self._config_file, "r", encoding="utf-8") as f:
+            logger.info(f"Reading config file: {self._config_file}")
+            self._config = SessionConfig.model_validate_json(f.read())
+            return self
+
+
+    def _load_chat(self):
+        if self._chat_messages:
+            return self
+
+        if not self._chat_file.exists():
+            self._chat_messages = []
+            return self
+
+        with open(self._chat_file, "r", encoding="utf-8") as f:
+            logger.info(f"Reading chat file: {self._chat_file}")
+            self._chat_messages = adapter.validate_json(f.read())
+            return self
+
+    def save_config(self):
+        if not self._config:
+            return self
+
+        logger.info(f"Saving config file: {self._config_file}")
+        with open(self._config_file, "w", encoding="utf-8") as f:
+            f.write(adapter.dump_json(self._config).decode())
+        logger.info(f"Session file saved: {self._config_file}")
+        return self
+
+    def save_chat(self):
+        if not self._chat_messages:
+            return self
+
+        logger.info(f"Saving chat file: {self._chat_file}")
+        with open(self._chat_file, "w", encoding="utf-8") as f:
+            f.write(adapter.dump_json(self._chat_messages).decode())
+        logger.info(f"Session file saved: {self._chat_file}")
+        return self
 
     @staticmethod
-    def _get_sessions_dir() -> str:
-        path = Path.joinpath(Path.cwd(), "chats")
+    def _get_root_dir() -> Path:
+        path = Path.joinpath(Path.cwd(), "user_sessions")
         path.mkdir(exist_ok=True)
-        return str(path)
+        return path
 
     def append_chat_message(self, message: ChatMessage):
-        self._session.chats.append(message)
+        self._load_chat()._chat_messages.append(message)

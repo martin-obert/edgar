@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import {useConnectionStore} from "../stores/connection.store.ts";
+import {useBackendStore} from "../stores/backend.store.ts";
 import EdgarsTerminal from "../components/EdgarsTerminal.vue";
 import {createExitCommand, createPromptCommand} from "../commands.ts";
 import {onMounted, onUnmounted} from "vue";
 import {useRouter} from "vue-router";
+import SessionConfiguration from "../components/SessionConfiguration.vue";
 
 const {sessionId} = defineProps<{ sessionId: string }>()
 
-const connectionStore = useConnectionStore()
+const connectionStore = useBackendStore()
 const router = useRouter()
 const gameCommands = [createPromptCommand(connectionStore.ms, connectionStore.ws, sessionId), createExitCommand(router, '/')]
 
@@ -23,13 +24,9 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div>
+  <div class="flex flex-row gap-2">
     <EdgarsTerminal :commands="gameCommands"/>
-    <!--    <sub>{{ WebSocketStateToString(connectionStore.connectionState) }}</sub>-->
-    <!--    <div v-if="connectionStore.connectionState === WebSocketState.UNSET || connectionStore.connectionState === WebSocketState.CLOSED">-->
-    <!--      <Button label="Reconnect" @click="reconnect"/>-->
-    <!--      <ToggleSwitch v-model="connectionStore.ws.autoReconnect"/>-->
-    <!--    </div>-->
+    <SessionConfiguration :sessionId="sessionId"/>
   </div>
 </template>
 
