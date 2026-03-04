@@ -35,8 +35,5 @@ pubsub-debug.log
 database-debug.log
 storage-debug.log
 
-# Firebase cached config
-.firebaserc
-
 # Hosting build output
 /dist

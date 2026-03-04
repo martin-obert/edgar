@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "obert-e9d65"
+  },
+  "targets": {
+    "obert-e9d65": {
+      "hosting": {
+        "edgar": [
+          "edgar-ai-4b652"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}
