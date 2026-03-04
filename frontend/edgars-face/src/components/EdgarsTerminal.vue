@@ -9,8 +9,6 @@ import {
 } from "../commands.ts";
 import {useTerminalBuffer} from "../terminalBuffer.ts";
 import {onKeyStroke} from "@vueuse/core";
-import {useConnectionStore} from "../stores/connection.store.ts";
-import {WebSocketState} from "../websocket-manager.ts";
 
 const {commands} = defineProps<{ commands: TerminalCommand[] }>()
 const messages = ref<TerminalMessage[]>([])
