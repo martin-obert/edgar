@@ -25,7 +25,7 @@ export class WebSocketManagerError extends Error {
 export interface IWebSocketManager {
     get state(): WebSocketState
 
-    connectAsync(timeout: number, cancellationToken: AbortSignal): Promise<void>
+    connectAsync(sessionId: string, timeout: number, cancellationToken: AbortSignal): Promise<void>
 
     disconnectAsync(code?: number, reason?: string): Promise<void>
 
@@ -91,7 +91,7 @@ class WebSocketManager implements IWebSocketManager, IMessageStream {
         this._stateInternal = this._ws?.readyState as WebSocketState ?? WebSocketState.UNSET
     }
 
-    async connectAsync(timeout: number, cancellationSignal: AbortSignal): Promise<void> {
+    async connectAsync(sessionId: string, timeout: number, cancellationSignal: AbortSignal): Promise<void> {
         await this.disconnectAsync()
 
         cancellationSignal.addEventListener('abort', async () => {
@@ -104,7 +104,7 @@ class WebSocketManager implements IWebSocketManager, IMessageStream {
             if (this._ws) throw new Error("WebSocket not reset")
 
             this._updateState()
-            this._ws = new WebSocket(this._baseUrl)
+            this._ws = new WebSocket(`${this._baseUrl}?session_id=${sessionId}`)
             this._updateState()
 
             this._ws.onopen = (e: Event) => {

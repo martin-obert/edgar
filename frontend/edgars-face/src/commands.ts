@@ -3,6 +3,7 @@ import {type Ref} from "vue";
 import {type IWebSocketManager, WebSocketState} from "./websocket-manager.ts";
 import type {TerminalOutputBuffer} from "./terminalBuffer.ts";
 import {type IMessageManager} from "./message-manager.ts";
+import {v4 as uuid} from "uuid";
 
 export interface TerminalMessage {
     type: 'in' | 'out',
@@ -30,25 +31,11 @@ export const createPlayCommand = (router: Router, ws: IWebSocketManager) => {
         canProcess: (val) => val.startsWith('play'),
         description: "Play the game",
         execute: async ({buffer, cancellationToken}) => {
-            const timeout = 1500
-            const reconnectionAttempts = 10
-            buffer.write("Connecting...")
-            for (let i = 0; i < reconnectionAttempts; i++) {
-                if (cancellationToken.aborted) return
-                try {
-                    await ws.connectAsync(timeout, cancellationToken)
-                    buffer.write("Connected")
-                    break
-                } catch (e) {
-                    if (cancellationToken.aborted) {
-                        buffer.write("Connection aborted")
-                        return
-                    }
-                    buffer.write(`Reconnecting ${i + 1}/${reconnectionAttempts}...`)
-                    await new Promise(resolve => setTimeout(resolve, timeout))
-                }
-            }
-            await router.push('/game')
+            const sessionId = uuid()
+
+            buffer.write("Connecting to E.D.G.A.R. interface...")
+            await connectProcedure(sessionId, ws, {buffer, cancellationToken, command: "connect"})
+            await router.push(`/game/${sessionId}`)
         }
     } as TerminalCommand
 }
@@ -91,14 +78,14 @@ export const createLoremCommand = () => {
 }
 
 
-export const createPromptCommand = (ms: IMessageManager, ws: IWebSocketManager) => {
+export const createPromptCommand = (ms: IMessageManager, ws: IWebSocketManager, sessionId: string) => {
     return {
-        name: "prompt",
+        name: ":[your-prompt-text]",
         canProcess: (val) => val.startsWith(':'),
         description: "Prompt E.D.G.A.R.s",
         execute: async ({command, buffer, cancellationToken}) => {
             if (ws.state === WebSocketState.CLOSED || ws.state === WebSocketState.CLOSING || ws.state === WebSocketState.UNSET) {
-                const result = await connectProcedure(ws, {buffer, cancellationToken, command})
+                const result = await connectProcedure(sessionId, ws, {buffer, cancellationToken, command})
                 if (!result) {
                     buffer.write("Unable to process prompt, no connection to E.D.G.A.R. available. Please try again later.")
                     return
@@ -133,14 +120,15 @@ export const createExitCommand = (router: Router, route: string) => {
     } as TerminalCommand
 }
 
-const connectProcedure = async (ws: IWebSocketManager, {cancellationToken}: TerminalCommandContext) => {
+const connectProcedure = async (sessionId: string, ws: IWebSocketManager, {cancellationToken}: TerminalCommandContext) => {
     const timeout = 1500
     const reconnectionAttempts = 10
-    console.log("Connecting...")
+    console.log(`Connecting to session ... ${sessionId}`)
+
     for (let i = 0; i < reconnectionAttempts; i++) {
         if (cancellationToken.aborted) return
         try {
-            await ws.connectAsync(timeout, cancellationToken)
+            await ws.connectAsync(sessionId, timeout, cancellationToken)
             console.log("Connected")
             return true
         } catch (e) {
