@@ -73,10 +73,10 @@ jobs:
         run: |
           ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << COMMANDS
             echo "Connected via Cloudflare Tunnel"
-            sudo docker stop edgar-api || true
-            sudo docker rm edgar-api || true
-            sudo docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.tag }}
-            sudo docker run -d --name edgar-api -p 8000:8000 \
+            docker stop edgar-api || true
+            docker rm edgar-api || true
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.tag }}
+            docker run -d --name edgar-api -p 8000:8000 \
               --env-file /home/${{ secrets.SSH_USER }}/edgar/.env \
               ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.tag }}
           COMMANDS
