@@ -4,7 +4,7 @@ import GameView from "./views/GameView.vue";
 
 const routes = [
     { path: '/', component: HomeView },
-    { path: '/game', component: GameView },
+    { path: '/game/:sessionId', component: GameView, props: true },
 ]
 
 export default createRouter({

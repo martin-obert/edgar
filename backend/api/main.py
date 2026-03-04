@@ -1,19 +1,23 @@
 import json
+
+from httpx import Response
+from uuid import UUID
 import logging
 from dataclasses import dataclass
 from os import getenv
 import flatbuffers
 import httpx
-from fastapi import FastAPI, requests
+from fastapi import FastAPI
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from starlette.websockets import WebSocket
 import sys
 from pathlib import Path
+from sessions import sessions
+from sessions.sessions import ChatMessage
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("api")
-
 
 sys.path.insert(0, str(Path(__file__).parent / "generated"))
 from generated.Edgar import Message
@@ -95,7 +99,6 @@ class RequestManager:
         self.requests.pop(req_id)
 
 
-manager = RequestManager()
 app = FastAPI()
 
 app.add_middleware(
@@ -106,57 +109,81 @@ app.add_middleware(
 )
 
 
-async def send_prompt(val: str, request: TerminalRequest):
-    idx = 0
+async def send_prompt(val: str, request: TerminalRequest, session_manager: sessions.SessionManager):
+    session_manager.append_chat_message(ChatMessage(role="user", content=val))
     async with httpx.AsyncClient() as client:
         base_url = getenv("API_BASE_URL")
-        url = f"{base_url}/api/generate"
+        url = f"{base_url}/api/chat"
+        logger.info(f"Sending request to {url}")
         async  with client.stream('POST', url,
                                   headers={
                                       'Content-Type': 'application/json',
                                       'CF-Access-Client-Id': getenv("CF_ACCESS_CLIENT_ID"),
                                       'CF-Access-Client-Secret': getenv("CF_ACCESS_CLIENT_SECRET")
                                   },
-                                  json={'model': 'qwen2.5:3b', 'prompt': val, 'stream': True}) as r:
-            async for line in r.aiter_lines():
-                chunk = json.loads(line)
-                is_done = chunk.get('done')
+                                  json={
+                                      'model': session_manager.session_model,
+                                      'messages': [m.model_dump() for m in session_manager.chat_messages],
+                                      'stream': True}) as r:
 
-                is_partial: str
-                if is_done:
-                    is_partial = str(False)
-                else:
-                    is_partial = str(True)
-
-                await request.respond(chunk["response"], {
-                    known_headers.chunk_id: str(idx),
-                    known_headers.is_partial: is_partial,
-                    known_headers.id: request.id
-                })
-
-                if is_done:
-                    break
-                idx += 1
+            logger.info(f"Response status: {r.status_code}")
 
             r.raise_for_status()
+
+            content = await process_chunks(r, request)
+
+            session_manager.append_chat_message(ChatMessage(role="assistant", content=content))
+
+
+async def process_chunks(r: Response, request: TerminalRequest) -> str:
+    idx = 0
+    content_bits = []
+    async for line in r.aiter_lines():
+        chunk: dict = json.loads(line)
+        logger.info(f"Received chunk: {chunk}")
+        content = chunk['message']['content']
+        content_bits.append(content)
+
+        done: bool = chunk.get('done')
+        is_partial: str
+        if done:
+            is_partial = str(False)
+        else:
+            is_partial = str(True)
+
+        await request.respond(content, {
+            known_headers.chunk_id: str(idx),
+            known_headers.is_partial: is_partial,
+            known_headers.id: request.id
+        })
+
+        if done:
+            break
+        idx += 1
+
+    return "".join(content_bits)
+
 
 @app.get("/healthz", include_in_schema=False)
 async def healthz():
     return {"status": "ok"}
 
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     try:
-        await websocket.accept()
-        logger.info("Websocket connected")
-        while True:
-            logger.info("Waiting for message")
-            b = await websocket.receive_bytes()
-            logger.info("Received message")
-            message = parse_message(b)
-            req = TerminalRequest(message, websocket)
-            manager.requests[req.id] = req
-            await send_prompt(req.body, req)
-            manager.complete(req.id)
+        session_id = UUID(websocket.query_params.get("session_id"))
+
+        logger.info(f"Websocket connected with session_id: {session_id}")
+        with sessions.SessionManager(session_id=session_id) as session_manager:
+            await websocket.accept()
+            logger.info("Websocket connected")
+            while True:
+                logger.info("Waiting for message")
+                b = await websocket.receive_bytes()
+                logger.info("Received message")
+                message = parse_message(b)
+                req = TerminalRequest(message, websocket)
+                await send_prompt(req.body, req, session_manager)
     except Exception as e:
         logger.error(f"Error: {e}")

@@ -5,9 +5,11 @@ import {createExitCommand, createPromptCommand} from "../commands.ts";
 import {onMounted, onUnmounted} from "vue";
 import {useRouter} from "vue-router";
 
+const {sessionId} = defineProps<{ sessionId: string }>()
+
 const connectionStore = useConnectionStore()
 const router = useRouter()
-const gameCommands = [createPromptCommand(connectionStore.ms, connectionStore.ws), createExitCommand(router, '/')]
+const gameCommands = [createPromptCommand(connectionStore.ms, connectionStore.ws, sessionId), createExitCommand(router, '/')]
 
 onMounted(() => {
   connectionStore.ms.init()
