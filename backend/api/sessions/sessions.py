@@ -14,11 +14,19 @@ class ChatMessage(BaseModel):
     thinking: str | None = None
 
 
+class ShipSystem(BaseModel):
+    name: str
+
+
+_default_systems: list[ShipSystem] = []
+
+
 class SessionConfig(BaseModel):
     model: str
     system_prompt: str | None = None
+    ship_system: list[ShipSystem] = _default_systems
 
-_default_tools: list[SystemTool] = []
+
 default_session_configuration = SessionConfig(model='qwen2.5:3b', system_prompt='You are a helpful assistant.')
 adapter = TypeAdapter(list[ChatMessage])
 
@@ -61,7 +69,6 @@ class SessionManager:
             logger.info(f"Reading config file: {self._config_file}")
             self._config = SessionConfig.model_validate_json(f.read())
             return self
-
 
     def _load_chat(self):
         if self._chat_messages:
