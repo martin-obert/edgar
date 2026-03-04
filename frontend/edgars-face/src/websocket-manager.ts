@@ -99,12 +99,13 @@ class WebSocketManager implements IWebSocketManager, IMessageStream {
         })
 
         return new Promise<void>((resolve, reject) => {
-            console.log(`Connecting to: ${this._baseUrl}`)
+            const url = `${this._baseUrl}?session_id=${sessionId}`
+            console.log(`Connecting to: ${url}`)
 
             if (this._ws) throw new Error("WebSocket not reset")
 
             this._updateState()
-            this._ws = new WebSocket(`${this._baseUrl}?session_id=${sessionId}`)
+            this._ws = new WebSocket(url)
             this._updateState()
 
             this._ws.onopen = (e: Event) => {
