@@ -13,12 +13,15 @@ class ChatMessage(BaseModel):
     content: str
     thinking: str | None = None
 
+class SystemTool(BaseModel):
+
 
 class SessionConfig(BaseModel):
     model: str
     system_prompt: str | None = None
+    too
 
-
+_default_tools: list[SystemTool] = []
 default_session_configuration = SessionConfig(model='qwen2.5:3b', system_prompt='You are a helpful assistant.')
 adapter = TypeAdapter(list[ChatMessage])
 
