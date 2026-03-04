@@ -2,10 +2,6 @@ import {MessageT} from "./generated/edgar/message.ts";
 import {Builder} from "flatbuffers";
 import {HeaderValueT} from "./generated/edgar/header-value.ts";
 
-export const messageType = {
-    PROMPT_REQUEST: 'prompt_request',
-}
-
 export const getHeader = (headers: HeaderValueT[], key: string): string | undefined => {
     const idHeader = headers.find(header => header.name === key);
     if (idHeader) return getHeaderValue(idHeader)
@@ -14,23 +10,32 @@ export const getHeader = (headers: HeaderValueT[], key: string): string | undefi
 
 export const isPartialResponse = (headers: HeaderValueT[]) => {
     const val = getHeader(headers, 'partial-response')
-    if(!val) return false
+    if (!val) return false
 
     return val.toLowerCase() === 'true' || val === '1'
 }
 
-export const getChunkId = (headers: HeaderValueT[]) : number | undefined => {
+export const getChunkId = (headers: HeaderValueT[]): number | undefined => {
     const n = getHeader(headers, 'chunk-id')
-    if(!n) return undefined
+    if (!n) return undefined
     return parseInt(n)
 }
 
 export const getRequestId = (headers: HeaderValueT[]) => {
     return getHeader(headers, 'id')
 }
+export const ContentType = {
+    chunk: 'message/content+chunk',
+    tool_call: 'message/tool_call',
+    request_done: 'signal/request+done',
+    request_prompt: 'signal/request+prompt',
+}
+export const getContentType = (headers: HeaderValueT[]) => {
+    return getHeader(headers, 'content-type')
+}
 
-export const getBody = (body: number[])=>{
-    return  new TextDecoder().decode(new Uint8Array(body.map(b => b & 0xFF)));
+export const getBody = (body: number[]) => {
+    return new TextDecoder().decode(new Uint8Array(body.map(b => b & 0xFF)));
 }
 
 export const getHeaderValue = (headerValueT: HeaderValueT): string | undefined => {
@@ -46,8 +51,7 @@ export const getHeaderValue = (headerValueT: HeaderValueT): string | undefined =
 }
 
 
-
-export const createWebSocketMessage = (body: string, headers: { id: string, type: string }): MessageT => {
+export const createWebSocketMessage = (body: string, headers: Record<string, string>): MessageT => {
     const r = new MessageT();
     const requestHeaders: HeaderValueT[] = []
 

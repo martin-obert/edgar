@@ -9,6 +9,7 @@ import flatbuffers
 import httpx
 from fastapi import FastAPI
 from dotenv import load_dotenv
+from pydantic import BaseModel, TypeAdapter
 from starlette.middleware.cors import CORSMiddleware
 from starlette.websockets import WebSocket
 import sys
@@ -31,9 +32,44 @@ class MessageHeaders:
     id: str
     is_partial: str
     chunk_id: str
+    content_type: str
 
 
-known_headers = MessageHeaders(id="id", is_partial="partial-response", chunk_id="chunk-id")
+@dataclass(frozen=True)
+class ContentType:
+    assistant_message_chunk: str = "message/content+chunk"
+    tool_call: str = "message/tool_call"
+    signal_request_done: str = "signal/request+done"
+
+
+known_headers = MessageHeaders(id="id", is_partial="partial-response", chunk_id="chunk-id", content_type="content-type")
+
+
+class OllamaFunction(BaseModel):
+    name: str = ""
+    arguments: dict | None = None
+    index: int | None = None
+
+class OllamaToolCall(BaseModel):
+    id: str | None = None
+    function: OllamaFunction | None = None
+
+
+class OllamaMessage(BaseModel):
+    role: str | None
+    content: str | None
+    thinking: str | None = None
+    tool_calls: list[OllamaToolCall] | None = None
+
+
+class OllamaResponse(BaseModel):
+    model: str
+    message: OllamaMessage
+    created_at: str | None = None
+    done: bool | None = False
+    done_reason: str | None = None
+    total_duration: int | None = None
+
 
 active_sessions: dict[UUID, sessions.SessionManager] = {}
 
@@ -111,13 +147,40 @@ app.add_middleware(
 )
 
 
+async def partial_content_response(r: TerminalRequest, content: str, chunk_id: int):
+    await r.respond(content, headers={
+        known_headers.chunk_id: str(chunk_id),
+        known_headers.content_type: ContentType.assistant_message_chunk,
+        known_headers.id: r.id,
+        known_headers.is_partial: str(True)
+    })
+
+
+async def signal_request_done(r):
+    await r.respond("", headers={
+        known_headers.content_type: ContentType.signal_request_done,
+        known_headers.id: r.id,
+        known_headers.is_partial: str(False)
+    })
+
+
+async def signal_tool_call(r, content: str):
+    await r.respond("", headers={
+        known_headers.content_type: ContentType.tool_call,
+        known_headers.id: r.id,
+        known_headers.is_partial: str(False)
+    })
+
+
 async def send_prompt(val: str, request: TerminalRequest, session_manager: sessions.SessionManager):
+    # TODO: can be role = tool
     session_manager.append_chat_message(ChatMessage(role="user", content=val))
     async with httpx.AsyncClient() as client:
         base_url = getenv("API_BASE_URL")
         url = f"{base_url}/api/chat"
         logger.info(f"Sending request to {url}")
-        chat = [m.model_dump() for m in session_manager.chat_messages]
+        chat = [m.model_dump(exclude_none=True) for m in session_manager.chat_messages]
+        tools = [t.model_dump() for t in session_manager.configuration.all_tools]
         async  with client.stream('POST', url,
                                   headers={
                                       'Content-Type': 'application/json',
@@ -130,6 +193,7 @@ async def send_prompt(val: str, request: TerminalRequest, session_manager: sessi
                                           {'role': 'system', 'content': session_manager.configuration.system_prompt},
                                           *chat
                                       ],
+                                      'tools': tools,
                                       'stream': True
                                   }) as r:
             logger.info(f"Response status: {r.status_code}")
@@ -145,26 +209,20 @@ async def process_chunks(r: Response, request: TerminalRequest) -> str:
     idx = 0
     content_bits = []
     async for line in r.aiter_lines():
-        chunk: dict = json.loads(line)
-        logger.info(f"Received chunk: {chunk}")
-        content = chunk['message']['content']
-        content_bits.append(content)
+        logger.info(f"Received chunk: {line}")
+        m = OllamaResponse.model_validate_json(line)
 
-        done: bool = chunk.get('done')
-        is_partial: str
-        if done:
-            is_partial = str(False)
-        else:
-            is_partial = str(True)
+        if len(m.message.content) > 0:
+            content_bits.append(m.message.content)
+            await partial_content_response(request, m.message.content, idx)
 
-        await request.respond(content, {
-            known_headers.chunk_id: str(idx),
-            known_headers.is_partial: is_partial,
-            known_headers.id: request.id
-        })
+        if m.message.tool_calls is not None:
+            logger.info(f"Received tool call: {m.message.tool_calls}")
 
-        if done:
+        if m.done:
+            await signal_request_done(request)
             break
+
         idx += 1
 
     return "".join(content_bits)

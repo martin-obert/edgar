@@ -50,7 +50,7 @@ const onFormSubmit = async ({valid, values}: FormSubmitEvent) => {
     }
   }
 };
-const validModels = ['qwen3:4b','qwen2.5:3b']
+const validModels = ['qwen3:4b','qwen2.5:7b','qwen2.5:3b']
 
 </script>
 

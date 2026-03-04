@@ -2,6 +2,8 @@
 import logging
 
 import uuid
+from typing import Any
+
 from pydantic import BaseModel, TypeAdapter
 
 logging.basicConfig(level=logging.INFO)
@@ -14,20 +16,46 @@ class ChatMessage(BaseModel):
     thinking: str | None = None
 
 
-class ShipSystem(BaseModel):
+class SystemToolParameters(BaseModel):
+    type: str
+    properties: dict[str, Any]
+    required: list[str] | None = None
+
+
+class SystemTool(BaseModel):
     name: str
+    description: str
+    parameters: SystemToolParameters | None = None
 
 
-_default_systems: list[ShipSystem] = []
+class SystemToolWrapper(BaseModel):
+    type: str = "function"
+    function: SystemTool
+
+
+_default_tools: list[SystemToolWrapper] = [
+    SystemToolWrapper(type="function", function=SystemTool(name="search",
+                                                           description="Search the web",
+                                                           parameters=SystemToolParameters(
+                                                               type="object",
+                                                               properties={
+                                                                   "query": {"type": "string",
+                                                                             "description": "The search query"},
+                                                               },
+                                                               required=["query"]))
+                      )
+]
 
 
 class SessionConfig(BaseModel):
     model: str
     system_prompt: str | None = None
-    ship_system: list[ShipSystem] = _default_systems
+    all_tools: list[SystemTool] = _default_tools
 
 
-default_session_configuration = SessionConfig(model='qwen2.5:3b', system_prompt='You are a helpful assistant.')
+tools_adapter = TypeAdapter(list[SystemTool])
+
+default_session_configuration = SessionConfig(model='qwen2.5:7b', system_prompt='You are a helpful assistant.')
 adapter = TypeAdapter(list[ChatMessage])
 
 

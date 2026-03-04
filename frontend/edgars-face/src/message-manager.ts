@@ -1,10 +1,11 @@
 import type {MessageT} from "./generated/edgar/message.ts";
 import {
+    ContentType,
     createWebSocketMessage,
-    getBody, getChunkId,
+    getBody,
+    getChunkId, getContentType,
     getRequestId,
     isPartialResponse,
-    messageType
 } from "./websocket-messaging.ts";
 import {v4 as uuidv4} from "uuid";
 
@@ -142,6 +143,8 @@ export interface IMessageStream {
 export interface IMessageManager {
     init(): void;
 
+    get activeRequestId(): string | undefined;
+
     dispose(): void;
 
     sendPromptRequest(content: string, options: {
@@ -152,6 +155,10 @@ export interface IMessageManager {
 class MessageManager implements IMessageManager {
     private readonly _inboxBuffer: MessageT[] = []
     private readonly _outboxBuffer: MessageT[] = []
+    private _activeRequestId: string | undefined
+    get activeRequestId() {
+        return this._activeRequestId
+    }
 
     private _currentPrompt: WsRequestWrapper | undefined;
 
@@ -175,10 +182,13 @@ class MessageManager implements IMessageManager {
             throw new MessageManagerError("Message stream is not writable", 'STREAM_NOT_WRITABLE')
         }
 
-        const id = uuidv4()
-        this._currentPrompt = new WsRequestWrapper(id, options.onResponse)
+        this._activeRequestId = uuidv4()
+        this._currentPrompt = new WsRequestWrapper(this._activeRequestId, options.onResponse)
 
-        this._outboxBuffer.push(createWebSocketMessage(content, {id: id, type: messageType.PROMPT_REQUEST}))
+        this._outboxBuffer.push(createWebSocketMessage(content, {
+            id: this._activeRequestId,
+            'content-type': ContentType.request_prompt
+        }))
 
         return this._currentPrompt
     }
@@ -208,10 +218,13 @@ class MessageManager implements IMessageManager {
                 const inMessage = this._inboxBuffer[i]
                 if (!inMessage) continue
                 const messageId = getRequestId(inMessage.headers)
-                const isPartial = isPartialResponse(inMessage.headers)
+                const contentType = getContentType(inMessage.headers)
+                if(contentType === ContentType.request_done){
+                    this._activeRequestId = undefined
+                }
                 const body = getBody(inMessage.body)
                 const chunkId = getChunkId(inMessage.headers)
-                console.log(`Processing message: ${messageId} - ${isPartial ? 'PARTIAL' : 'FULL'} - ${chunkId} - ${body}`)
+                console.log(`Processing message: ${messageId} - ${chunkId} - ${body}`)
 
                 if (this._currentPrompt && this._currentPrompt.id === messageId) {
                     this._currentPrompt.onMessage(inMessage)
