@@ -13,8 +13,6 @@ class ChatMessage(BaseModel):
     content: str
     thinking: str | None = None
 
-class SystemTool(BaseModel):
-
 
 class SessionConfig(BaseModel):
     model: str
