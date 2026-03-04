@@ -1,8 +1,6 @@
 services:
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/martin-obert/edgar-api:98cee76b42ea443a580c0beda50accab539ebe4a
     container_name: fastapi-app
     ports:
       - "${APP_PORT:-8000}:8000"
