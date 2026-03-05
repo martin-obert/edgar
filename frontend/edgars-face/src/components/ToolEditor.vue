@@ -17,9 +17,8 @@ const v = computed({
 <template>
   <Panel>
     <JsonEditorVue v-if="editing"
-        v-model="v"
-        mode="text"
-        :navigation-bar="false"
+                   v-model="v"
+                   :navigation-bar="false"
     />
     <p v-else>
       {{ definition }}}

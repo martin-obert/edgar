@@ -11,12 +11,14 @@ import ShipDoors from "../gameplay/ShipDoors.vue";
 
 const {sessionId} = defineProps<{ sessionId: string }>()
 const backend = useBackendStore()
+
 const {
   state: initialValues,
   isReady
 } = useAsyncState<SessionConfiguration>(
     () => backend.rest.getSessionConfiguration(sessionId),
     {} as SessionConfiguration,
+  //@ts-ignore
     {immediate: true, resetOnExecute: false, shallow: false}
 )
 

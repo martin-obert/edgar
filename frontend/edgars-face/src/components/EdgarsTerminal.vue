@@ -4,8 +4,6 @@ import CypherSentence from "../components/CypherSentence.vue";
 import {createClearCommand, createHelpCommand, type TerminalCommand, type TerminalMessage,} from "../commands.ts";
 import {useTerminalBuffer} from "../terminalBuffer.ts";
 import {onKeyStroke} from "@vueuse/core";
-import type {ToolCallEvent} from "../message-manager.ts";
-import ShipDoors from "../gameplay/ShipDoors.vue";
 
 const {commands} = defineProps<{ commands: TerminalCommand[] }>()
 const messages = ref<TerminalMessage[]>([])
