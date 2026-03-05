@@ -4,14 +4,15 @@ import type {FormResolverOptions, FormSubmitEvent} from "@primevue/forms";
 import {useToast} from "primevue";
 import {useAsyncState} from "@vueuse/core";
 import {useBackendStore} from "../stores/backend.store.ts";
-import type {SessionConfiguration} from "../rest.api.ts";
+import type {OllamaFunctionDefinition, SessionConfiguration} from "../rest.api.ts";
+import {computed} from "vue";
 
 const {sessionId} = defineProps<{ sessionId: string }>()
 const backend = useBackendStore()
 const {
   state: initialValues,
   isReady
-} = useAsyncState<SessionConfiguration | {}>(() => backend.rest.getSessionConfiguration(sessionId), {}, {
+} = useAsyncState<SessionConfiguration>(() => backend.rest.getSessionConfiguration(sessionId), {} as SessionConfiguration, {
   immediate: true, resetOnExecute: false,
 })
 
@@ -50,7 +51,7 @@ const onFormSubmit = async ({valid, values}: FormSubmitEvent) => {
     }
   }
 };
-const validModels = ['qwen3:4b','qwen2.5:7b','qwen2.5:3b']
+const validModels = ['qwen3:4b', 'qwen2.5:7b', 'qwen2.5:3b']
 
 </script>
 
@@ -78,6 +79,10 @@ const validModels = ['qwen3:4b','qwen2.5:7b','qwen2.5:3b']
               </Message>
             </IftaLabel>
           </Fieldset>
+          <div v-for="tool in initialValues.all_tools">
+
+            <InputText label="Tool Name" v-model="tool.function.name"/>
+          </div>
         </div>
       </template>
       <template #footer>

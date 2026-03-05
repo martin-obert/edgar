@@ -51,11 +51,11 @@ _default_tools: list[OllamaToolWrapper] = [
 class SessionConfig(BaseModel):
     model: str
     system_prompt: str | None = None
-    all_tools: list[SystemTool] = _default_tools
+    all_tools: list[OllamaToolWrapper] = _default_tools
 
 
 tools_adapter = TypeAdapter(list[SystemTool])
 
-default_session_configuration = SessionConfig(model='qwen2.5:7b', system_prompt='You are a helpful assistant.')
+default_session_configuration = SessionConfig(model='qwen2.5:7b', system_prompt='You are a helpful assistant.', all_tools=_default_tools)
 adapter = TypeAdapter(list[ChatMessage])
 
