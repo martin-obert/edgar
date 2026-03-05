@@ -6,6 +6,8 @@ import {useAsyncState} from "@vueuse/core";
 import {useBackendStore} from "../stores/backend.store.ts";
 import type {SessionConfiguration} from "../rest.api.ts";
 import ToolEditor from "./ToolEditor.vue";
+import {toolDefinitions} from "../gameplay/door-tools.ts";
+import ShipDoors from "../gameplay/ShipDoors.vue";
 
 const {sessionId} = defineProps<{ sessionId: string }>()
 const backend = useBackendStore()
@@ -89,6 +91,8 @@ const validModels = ['qwen3:4b', 'qwen2.5:7b', 'qwen2.5:3b']
             </div>
             <Button label="Add"
                     @click="initialValues.all_tools.push(JSON.parse(defaultTemplate))"/>
+
+            <Button label="Add Doors module" @click="initialValues.all_tools.push(...toolDefinitions)"></Button>
           </Fieldset>
         </div>
       </template>
@@ -97,6 +101,7 @@ const validModels = ['qwen3:4b', 'qwen2.5:7b', 'qwen2.5:3b']
       </template>
     </Card>
   </Form>
+  <ShipDoors v-if="initialValues.all_tools && initialValues.all_tools.find(t => t.function.name === 'list_doors')"/>
 
 </template>
 
