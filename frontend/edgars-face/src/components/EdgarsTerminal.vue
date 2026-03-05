@@ -5,6 +5,7 @@ import {createClearCommand, createHelpCommand, type TerminalCommand, type Termin
 import {useTerminalBuffer} from "../terminalBuffer.ts";
 import {onKeyStroke} from "@vueuse/core";
 import type {ToolCallEvent} from "../message-manager.ts";
+import ShipDoors from "../gameplay/ShipDoors.vue";
 
 const {commands} = defineProps<{ commands: TerminalCommand[] }>()
 const messages = ref<TerminalMessage[]>([])
@@ -16,11 +17,6 @@ onMounted(() => {
     commandInput.value.focus()
   }
 
-  //@ts-ignore
-  window.addEventListener('toolCall', ({detail}: CustomEvent<ToolCallEvent>) => {
-    console.log(JSON.parse(detail.message.body), " ", detail.message.toolCallId!)
-    detail.messageManager.sendToolResponse("Error", detail.message.toolCallId!, detail.message.promptId!)
-  });
 })
 
 const c = [

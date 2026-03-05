@@ -59,14 +59,12 @@ async def websocket_endpoint(websocket: WebSocket):
     except Exception as e:
         logger.exception(f"Error: {e}")
     finally:
-
+        active_sessions.pop(session_id)
         logger.info("Closing websocket")
 
-        if getenv("TRANSIENT_SESSIONS") == "true":
-            return
-
-        session_manager.save_chat()
-        active_sessions.pop(session_id)
+        if getenv("PERSISTENT_SESSIONS") == "true":
+            session_manager.save_chat()
+            active_sessions.pop(session_id)
 
 
 @app.put("/api/v1/sessions/{session_id}/configuration")

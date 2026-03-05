@@ -18,9 +18,6 @@ logger = logging.getLogger("messaging/router")
 
 
 async def _chat(request: TerminalRequest, session_manager: sessions.manager.SessionManager):
-    # First, append the user prompt to the chat
-    session_manager.append_chat_message(ChatMessage(role=request.role, content=request.body))
-
     async with httpx.AsyncClient() as client:
         logger.info(f"Preparing request")
         chat = [m.model_dump(exclude_none=True) for m in session_manager.chat_messages]
@@ -68,6 +65,7 @@ async def process_chunks(r: Response, request: TerminalRequest,
         if m.message.tool_calls is not None:
             for tool_call in m.message.tool_calls:
                 tool_calls.append(tool_call)
+                logger.info(f"Adding tool call: {tool_call}")
                 session_manager.add_pending_tool_call(tool_call)
                 await request_tool_call(request, tool_call)
 
@@ -92,6 +90,8 @@ async def process_chunks(r: Response, request: TerminalRequest,
         logger.warning("No content or tool calls found in the response, maybe thinking?")
         return
 
+    logger.info(f"Tool calls: {session_manager.pending_tool_calls}")
+
     session_manager.append_chat_message(ChatMessage(role=OllamaRole.assistant, content=content, tool_calls=tc))
 
 
@@ -100,6 +100,7 @@ async def handle_user_prompt(request: TerminalRequest, session_manager: sessions
         raise ValueError(f"Expected role to be user, got {request.role}")
 
     if not session_manager.has_pending_request:
+
         session_manager.pending_request = request
     else:
         if request.id is not session_manager.pending_request.id:
@@ -107,6 +108,8 @@ async def handle_user_prompt(request: TerminalRequest, session_manager: sessions
             session_manager.dump_tool_calls_to_chat()
             session_manager.pending_request = request
 
+    # First, append the user prompt to the chat
+    session_manager.append_chat_message(ChatMessage(role=request.role, content=request.body))
     return await _chat(request, session_manager)
 
 
@@ -127,11 +130,14 @@ async def handle_tool_response(request: TerminalRequest, session_manager: Sessio
         logger.warning(f"Received tool response for unexpected request ID: {request.id}")
         return None
 
+
     # Remove a pending tool call from the session manager
     session_manager.resolve_pending_tool_call(request.tool_call_id, request.body)
+    logger.info(f"Resolved tool call: {request.tool_call_id}")
 
     if session_manager.has_pending_tool_calls and session_manager.all_tool_calls_resolved:
         session_manager.dump_tool_calls_to_chat()
+        logger.info(f"All tool calls resolved")
         return await _chat(request, session_manager)
 
     return None

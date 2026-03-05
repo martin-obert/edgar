@@ -16,6 +16,7 @@
     "flatbuffers": "^25.9.23",
     "json-editor-vue": "^0.18.1",
     "pinia": "^3.0.4",
+    "primeicons": "^7.0.0",
     "primevue": "^4.5.4",
     "tailwindcss": "^4.2.1",
     "tailwindcss-primeui": "^0.6.1",

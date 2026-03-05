@@ -11,7 +11,7 @@ logger = logging.getLogger("api/sessions")
 
 class SystemToolParameters(BaseModel):
     type: str
-    properties: dict[str, Any]
+    properties: dict[str, Any] | None = None
     required: list[str] | None = None
 
 
@@ -56,6 +56,6 @@ class SessionConfig(BaseModel):
 
 tools_adapter = TypeAdapter(list[SystemTool])
 
-default_session_configuration = SessionConfig(model='qwen2.5:7b', system_prompt='You are a helpful assistant.', all_tools=_default_tools)
+default_session_configuration = SessionConfig(model='qwen2.5:7b', system_prompt='You are a helpful assistant.', all_tools=[])
 adapter = TypeAdapter(list[ChatMessage])
 

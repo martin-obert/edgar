@@ -1,6 +1,7 @@
 import {MessageT} from "./generated/edgar/message.ts";
 import {Builder} from "flatbuffers";
 import {HeaderValueT} from "./generated/edgar/header-value.ts";
+import type {OllamaFunctionCall} from "./message-manager.ts";
 
 export const getHeader = (headers: HeaderValueT[], key: string): string | undefined => {
     const idHeader = headers.find(header => header.name === key);
@@ -157,4 +158,8 @@ export const serializeMessage = (message: MessageT) => {
     const b = new Builder(0)
     b.finish(message.pack(b))
     return b.asUint8Array()
+}
+
+export const getFunctionFromBody = (body: string) =>{
+    return  JSON.parse(body) as OllamaFunctionCall
 }

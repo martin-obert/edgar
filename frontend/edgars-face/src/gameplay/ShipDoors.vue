@@ -1,0 +1,54 @@
+<script setup lang="ts">
+import {ref} from "vue";
+import {getFunctionFromBody} from "../websocket-messaging.ts";
+import type {ToolCallEvent} from "../message-manager.ts";
+import {useEventListener} from "@vueuse/core";
+
+interface ShipDoor {
+  name: string,
+  open: boolean,
+}
+
+const doors = ref<ShipDoor[]>([
+  {name: 'left', open: false},
+  {name: 'right', open: false},
+  {name: 'front', open: false},
+  {name: 'back', open: false},
+])
+
+function toolCallHandler({detail}: CustomEvent<ToolCallEvent>) {
+  const func = getFunctionFromBody(detail.message.body)
+  console.log(func.name)
+  if (func.name === 'list_doors') {
+    detail.messageManager.sendToolResponse(JSON.stringify(doors.value), detail.message.toolCallId!, detail.message.promptId!)
+    return
+  }
+  if (func.name === 'open_door' || func.name === 'close_door') {
+    const doorName = func.arguments.door_name
+    const results = doors.value.filter(door => door.name === doorName || doorName === "*")
+    results.forEach(door => {
+      door.open = func.name === 'open_door'
+      detail.messageManager.sendToolResponse(JSON.stringify(door), detail.message.toolCallId!, detail.message.promptId!)
+    })
+    detail.messageManager.sendToolResponse(`Doors ${doorName} not found`, detail.message.toolCallId!, detail.message.promptId!)
+  }
+}
+
+useEventListener(window, 'toolCall', toolCallHandler)
+
+</script>
+
+<template>
+  <div class="grid grid-cols-2 gap-2">
+    <div v-for="door in doors" class="flex flex-row justify-items-start gap-2">
+      <span :style="{color: door.open ? 'green' : 'red'}">
+        <span>{{ door.name }} </span><i class="pi" :class="!door.open ? 'pi-lock' : 'pi-lock-open'"></i>
+      </span>
+
+    </div>
+  </div>
+</template>
+
+<style scoped>
+
+</style>
