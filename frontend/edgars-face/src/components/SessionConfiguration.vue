@@ -61,48 +61,50 @@ const validModels = ['qwen3:4b', 'qwen2.5:7b', 'qwen2.5:3b']
 </script>
 
 <template>
-  <Form v-if="isReady" v-slot="$form" :initialValues :resolver @submit="onFormSubmit" class="w-full m-1 my-3">
-    <Card>
-      <template #title>
-        Configuration
-      </template>
-      <template #content>
-        <div class="flex flex-col gap-1">
-          <Fieldset legend="System" :toggleable="true" :collapsed="false">
-            <IftaLabel>
-              <Select :options="validModels" name="model"></Select>
-              <label for="model">Model</label>
-              <Message v-if="$form.model?.invalid" severity="error" size="small" variant="simple">
-                {{ $form.model.error?.message }}
-              </Message>
-            </IftaLabel>
-            <IftaLabel>
-              <Textarea name="system_prompt" class="w-full"/>
-              <label for="system_prompt">System Prompt</label>
-              <Message v-if="$form.system_prompt?.invalid" severity="error" size="small" variant="simple">
-                {{ $form.system_prompt.error?.message }}
-              </Message>
-            </IftaLabel>
-          </Fieldset>
-          <Fieldset legend="Tools" :toggleable="true" :collapsed="true">
-            <div v-for="(tool, index) in initialValues.all_tools" :key="tool.function.name">
-              <ToolEditor v-model:tool="initialValues.all_tools[index]!" class="mb-2"/>
-              <Button label="Remove" @click="initialValues.all_tools.splice(initialValues.all_tools.indexOf(tool), 1)"/>
-            </div>
-            <Button label="Add"
-                    @click="initialValues.all_tools.push(JSON.parse(defaultTemplate))"/>
+  <div class="w-full">
+    <Form v-if="isReady" v-slot="$form" :initialValues :resolver @submit="onFormSubmit" class="w-full m-1 my-3">
+      <Card>
+        <template #title>
+          Configuration
+        </template>
+        <template #content>
+          <div class="flex flex-col gap-1">
+            <Fieldset legend="System" :toggleable="true" :collapsed="false">
+              <IftaLabel>
+                <Select :options="validModels" name="model"></Select>
+                <label for="model">Model</label>
+                <Message v-if="$form.model?.invalid" severity="error" size="small" variant="simple">
+                  {{ $form.model.error?.message }}
+                </Message>
+              </IftaLabel>
+              <IftaLabel>
+                <Textarea name="system_prompt" class="w-full"/>
+                <label for="system_prompt">System Prompt</label>
+                <Message v-if="$form.system_prompt?.invalid" severity="error" size="small" variant="simple">
+                  {{ $form.system_prompt.error?.message }}
+                </Message>
+              </IftaLabel>
+            </Fieldset>
+            <Fieldset legend="Tools" :toggleable="true" :collapsed="true">
+              <div v-for="(tool, index) in initialValues.all_tools" :key="tool.function.name">
+                <ToolEditor v-model:tool="initialValues.all_tools[index]!" class="mb-2"/>
+                <Button label="Remove" @click="initialValues.all_tools.splice(initialValues.all_tools.indexOf(tool), 1)"/>
+              </div>
+              <Button label="Add"
+                      @click="initialValues.all_tools.push(JSON.parse(defaultTemplate))"/>
 
-            <Button label="Add Doors module" @click="initialValues.all_tools.push(...toolDefinitions)"></Button>
-          </Fieldset>
-        </div>
-      </template>
-      <template #footer>
-        <Button type="submit" severity="secondary" :disabled="!$form.valid" label="Submit"/>
-      </template>
-    </Card>
-  </Form>
-  <ShipDoors v-if="initialValues.all_tools && initialValues.all_tools.find(t => t.function.name === 'list_doors')"/>
+              <Button label="Add Doors module" @click="initialValues.all_tools.push(...toolDefinitions)"></Button>
+            </Fieldset>
+          </div>
+        </template>
+        <template #footer>
+          <Button type="submit" severity="secondary" :disabled="!$form.valid" label="Submit"/>
+        </template>
+      </Card>
+    </Form>
+    <ShipDoors v-if="initialValues.all_tools && initialValues.all_tools.find(t => t.function.name === 'list_doors')"/>
 
+  </div>
 </template>
 
 <style scoped>

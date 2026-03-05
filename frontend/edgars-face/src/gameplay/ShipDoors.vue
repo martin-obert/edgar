@@ -25,12 +25,11 @@ function toolCallHandler({detail}: CustomEvent<ToolCallEvent>) {
   }
   if (func.name === 'open_door' || func.name === 'close_door') {
     const doorName = func.arguments.door_name
-    const door = doors.value.find(door => door.name === doorName)
-    if (door) {
+    const results = doors.value.filter(door => door.name === doorName || doorName === "*")
+    results.forEach(door => {
       door.open = func.name === 'open_door'
       detail.messageManager.sendToolResponse(JSON.stringify(door), detail.message.toolCallId!, detail.message.promptId!)
-      return;
-    }
+    })
     detail.messageManager.sendToolResponse(`Doors ${doorName} not found`, detail.message.toolCallId!, detail.message.promptId!)
   }
 }
@@ -40,8 +39,13 @@ useEventListener(window, 'toolCall', toolCallHandler)
 </script>
 
 <template>
-  <div v-for="door in doors">
-    name: {{ door.name }} - open: {{ door.open }}
+  <div class="grid grid-cols-2 gap-2">
+    <div v-for="door in doors" class="flex flex-row justify-items-start gap-2">
+      <span :style="{color: door.open ? 'green' : 'red'}">
+        <span>{{ door.name }} </span><i class="pi" :class="!door.open ? 'pi-lock' : 'pi-lock-open'"></i>
+      </span>
+
+    </div>
   </div>
 </template>
 

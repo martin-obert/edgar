@@ -18,9 +18,6 @@ logger = logging.getLogger("messaging/router")
 
 
 async def _chat(request: TerminalRequest, session_manager: sessions.manager.SessionManager):
-    # First, append the user prompt to the chat
-    session_manager.append_chat_message(ChatMessage(role=request.role, content=request.body))
-
     async with httpx.AsyncClient() as client:
         logger.info(f"Preparing request")
         chat = [m.model_dump(exclude_none=True) for m in session_manager.chat_messages]
@@ -111,6 +108,8 @@ async def handle_user_prompt(request: TerminalRequest, session_manager: sessions
             session_manager.dump_tool_calls_to_chat()
             session_manager.pending_request = request
 
+    # First, append the user prompt to the chat
+    session_manager.append_chat_message(ChatMessage(role=request.role, content=request.body))
     return await _chat(request, session_manager)
 
 
