@@ -4,6 +4,7 @@ import CypherSentence from "../components/CypherSentence.vue";
 import {createClearCommand, createHelpCommand, type TerminalCommand, type TerminalMessage,} from "../commands.ts";
 import {useTerminalBuffer} from "../terminalBuffer.ts";
 import {onKeyStroke} from "@vueuse/core";
+import type {ToolCallEvent} from "../message-manager.ts";
 
 const {commands} = defineProps<{ commands: TerminalCommand[] }>()
 const messages = ref<TerminalMessage[]>([])
@@ -14,6 +15,12 @@ onMounted(() => {
   if (commandInput.value) {
     commandInput.value.focus()
   }
+
+  //@ts-ignore
+  window.addEventListener('toolCall', ({detail}: CustomEvent<ToolCallEvent>) => {
+    console.log(JSON.parse(detail.message.body), " ", detail.message.toolCallId!)
+    detail.messageManager.sendToolResponse("Error", detail.message.toolCallId!, detail.message.promptId!)
+  });
 })
 
 const c = [
@@ -57,6 +64,7 @@ const executeCommand = async (value: string) => {
     pushMessage({value: `Unknown command: ${commandSaturated}, help`, type: 'out'})
   }
 }
+
 
 const popBuffer = () => {
   if (outBuffer.length.value > 0) {

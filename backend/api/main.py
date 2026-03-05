@@ -1,141 +1,28 @@
-import json
-
-from httpx import Response
-from uuid import UUID
 import logging
-from dataclasses import dataclass
-from os import getenv
-import flatbuffers
-import httpx
-from fastapi import FastAPI
-from dotenv import load_dotenv
-from pydantic import BaseModel, TypeAdapter
-from starlette.middleware.cors import CORSMiddleware
-from starlette.websockets import WebSocket
 import sys
 from pathlib import Path
-from sessions import sessions
-from sessions.sessions import ChatMessage
+
+sys.path.insert(0, str(Path(__file__).parent / "generated"))
+
+from uuid import UUID
+from os import getenv
+from dotenv import load_dotenv
+from fastapi import FastAPI
+from starlette.middleware.cors import CORSMiddleware
+from starlette.websockets import WebSocket
+
+from message_router import handle
+from messaging.client_models import TerminalRequest
+from messaging.message_factory import parse_message
+from sessions.manager import SessionManager
+from sessions.models import SessionConfig
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("api")
 
-sys.path.insert(0, str(Path(__file__).parent / "generated"))
-from generated.Edgar import Message
-from generated.Edgar.HeaderValue import HeaderValueT
-
 load_dotenv()  # reads variables from a .env file and sets them in os.environ
 
-
-@dataclass(frozen=True)  # frozen=True makes it immutable (like const)
-class MessageHeaders:
-    id: str
-    is_partial: str
-    chunk_id: str
-    content_type: str
-
-
-@dataclass(frozen=True)
-class ContentType:
-    assistant_message_chunk: str = "message/content+chunk"
-    tool_call: str = "message/tool_call"
-    signal_request_done: str = "signal/request+done"
-
-
-known_headers = MessageHeaders(id="id", is_partial="partial-response", chunk_id="chunk-id", content_type="content-type")
-
-
-class OllamaFunction(BaseModel):
-    name: str = ""
-    arguments: dict | None = None
-    index: int | None = None
-
-class OllamaToolCall(BaseModel):
-    id: str | None = None
-    function: OllamaFunction | None = None
-
-
-class OllamaMessage(BaseModel):
-    role: str | None
-    content: str | None
-    thinking: str | None = None
-    tool_calls: list[OllamaToolCall] | None = None
-
-
-class OllamaResponse(BaseModel):
-    model: str
-    message: OllamaMessage
-    created_at: str | None = None
-    done: bool | None = False
-    done_reason: str | None = None
-    total_duration: int | None = None
-
-
-active_sessions: dict[UUID, sessions.SessionManager] = {}
-
-
-def parse_message(b: bytes) -> Message.MessageT:
-    message = Message.Message.GetRootAs(b, 0)
-    return Message.MessageT.InitFromObj(message)
-
-
-def create_message(body: bytes, headers: dict[str, str]):
-    """Serializes message with headers and body into flatbuffers bytes"""
-    builder = flatbuffers.Builder(0)
-    req = Message.MessageT()
-    req.headers = []
-    for key, value in headers.items():
-        req.headers.append(HeaderValueT(key, value))
-
-    req.body = body
-
-    builder.Finish(req.Pack(builder))
-
-    return builder.Output()
-
-
-def get_header_value(message: Message.MessageT, header_key: str) -> str | None:
-    for header in message.headers:
-        if header.name.decode('utf-8') == header_key:
-            return header.value
-    return None
-
-
-class TerminalRequest:
-    def __init__(self, message: Message.MessageT, websocket: WebSocket):
-        self.message = message
-        self.websocket = websocket
-        self.__id: str | None = None
-        self.__body: str | None = None
-
-    @property
-    def id(self) -> str:
-        if self.__id is None:
-            self.__id = get_header_value(self.message, known_headers.id)
-        return self.__id
-
-    @property
-    def body(self) -> str | None:
-        if self.__body is None:
-            self.__body = bytes(b & 0xFF for b in self.message.body).decode('utf-8')
-        return self.__body
-
-    async def respond(self, message: str, headers: dict[str, str]):
-        data = message.encode('utf-8')
-        bytes_data = create_message(data, headers)
-        logger.info(
-            f"Sending message with id {self.id} to websocket: {len(bytes_data)}"
-        )
-        await self.websocket.send_bytes(bytes_data)
-
-
-class RequestManager:
-    def __init__(self):
-        self.requests: dict[str, TerminalRequest] = {}
-
-    def complete(self, req_id: str):
-        self.requests.pop(req_id)
-
+active_sessions: dict[UUID, SessionManager] = {}
 
 app = FastAPI()
 
@@ -147,87 +34,6 @@ app.add_middleware(
 )
 
 
-async def partial_content_response(r: TerminalRequest, content: str, chunk_id: int):
-    await r.respond(content, headers={
-        known_headers.chunk_id: str(chunk_id),
-        known_headers.content_type: ContentType.assistant_message_chunk,
-        known_headers.id: r.id,
-        known_headers.is_partial: str(True)
-    })
-
-
-async def signal_request_done(r):
-    await r.respond("", headers={
-        known_headers.content_type: ContentType.signal_request_done,
-        known_headers.id: r.id,
-        known_headers.is_partial: str(False)
-    })
-
-
-async def signal_tool_call(r, content: str):
-    await r.respond("", headers={
-        known_headers.content_type: ContentType.tool_call,
-        known_headers.id: r.id,
-        known_headers.is_partial: str(False)
-    })
-
-
-async def send_prompt(val: str, request: TerminalRequest, session_manager: sessions.SessionManager):
-    # TODO: can be role = tool
-    session_manager.append_chat_message(ChatMessage(role="user", content=val))
-    async with httpx.AsyncClient() as client:
-        base_url = getenv("API_BASE_URL")
-        url = f"{base_url}/api/chat"
-        logger.info(f"Sending request to {url}")
-        chat = [m.model_dump(exclude_none=True) for m in session_manager.chat_messages]
-        tools = [t.model_dump() for t in session_manager.configuration.all_tools]
-        async  with client.stream('POST', url,
-                                  headers={
-                                      'Content-Type': 'application/json',
-                                      'CF-Access-Client-Id': getenv("CF_ACCESS_CLIENT_ID"),
-                                      'CF-Access-Client-Secret': getenv("CF_ACCESS_CLIENT_SECRET")
-                                  },
-                                  json={
-                                      'model': session_manager.configuration.model,
-                                      'messages': [
-                                          {'role': 'system', 'content': session_manager.configuration.system_prompt},
-                                          *chat
-                                      ],
-                                      'tools': tools,
-                                      'stream': True
-                                  }) as r:
-            logger.info(f"Response status: {r.status_code}")
-
-            r.raise_for_status()
-
-            content = await process_chunks(r, request)
-
-            session_manager.append_chat_message(ChatMessage(role="assistant", content=content))
-
-
-async def process_chunks(r: Response, request: TerminalRequest) -> str:
-    idx = 0
-    content_bits = []
-    async for line in r.aiter_lines():
-        logger.info(f"Received chunk: {line}")
-        m = OllamaResponse.model_validate_json(line)
-
-        if len(m.message.content) > 0:
-            content_bits.append(m.message.content)
-            await partial_content_response(request, m.message.content, idx)
-
-        if m.message.tool_calls is not None:
-            logger.info(f"Received tool call: {m.message.tool_calls}")
-
-        if m.done:
-            await signal_request_done(request)
-            break
-
-        idx += 1
-
-    return "".join(content_bits)
-
-
 @app.get("/healthz", include_in_schema=False)
 async def healthz():
     return {"status": "ok"}
@@ -237,7 +43,7 @@ async def healthz():
 async def websocket_endpoint(websocket: WebSocket):
     session_id = UUID(websocket.query_params.get("session_id"))
     logger.info(f"Websocket connected with session_id: {session_id}")
-    session_manager = active_sessions.get(session_id, sessions.SessionManager(session_id=session_id))
+    session_manager = active_sessions.get(session_id, SessionManager(session_id=session_id))
     try:
         active_sessions[session_id] = session_manager
         await websocket.accept()
@@ -248,17 +54,24 @@ async def websocket_endpoint(websocket: WebSocket):
             logger.info("Received message")
             message = parse_message(b)
             req = TerminalRequest(message, websocket)
-            await send_prompt(req.body, req, session_manager)
+            logger.info(f"Processing request: {req.id}")
+            await handle(req, session_manager)
     except Exception as e:
-        logger.error(f"Error: {e}")
+        logger.exception(f"Error: {e}")
     finally:
+
+        logger.info("Closing websocket")
+
+        if getenv("TRANSIENT_SESSIONS") == "true":
+            return
+
         session_manager.save_chat()
         active_sessions.pop(session_id)
 
 
 @app.put("/api/v1/sessions/{session_id}/configuration")
-async def update_session_configuration(session_id: UUID, configuration: sessions.SessionConfig):
-    return (active_sessions.get(session_id, sessions.SessionManager(session_id=session_id))
+async def update_session_configuration(session_id: UUID, configuration: SessionConfig):
+    return (active_sessions.get(session_id, SessionManager(session_id=session_id))
             .update_configuration(configuration)
             .save_config()
             .configuration)
@@ -266,4 +79,4 @@ async def update_session_configuration(session_id: UUID, configuration: sessions
 
 @app.get("/api/v1/sessions/{session_id}/configuration")
 async def get_session_configuration(session_id: UUID):
-    return active_sessions.get(session_id, sessions.SessionManager(session_id=session_id)).configuration
+    return active_sessions.get(session_id, SessionManager(session_id=session_id)).configuration

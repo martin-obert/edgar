@@ -1,7 +1,7 @@
-import {Message, MessageT} from "./generated/edgar.ts";
+import {Message} from "./generated/edgar.ts";
 import * as flatbuffers from "flatbuffers";
 import type {IMessageStream} from "./message-manager.ts";
-import {serializeMessage} from "./websocket-messaging.ts";
+import {TerminalRequest} from "./websocket-messaging.ts";
 
 export enum WsError {
     UNINITIALIZED = 0,
@@ -61,7 +61,7 @@ class WebSocketManager implements IWebSocketManager, IMessageStream {
         return this.state === WebSocketState.OPEN
     }
 
-    sendMessage(message: MessageT) {
+    sendMessage(message: TerminalRequest) {
         if (!this._ws)
             throw new WebSocketManagerError("WebSocket not set", WsError.UNINITIALIZED)
 
@@ -69,12 +69,12 @@ class WebSocketManager implements IWebSocketManager, IMessageStream {
             throw new WebSocketManagerError(`Invalid state: ${this.state}`, WsError.INVALID_STATE)
 
 
-        const data = serializeMessage(message)
+        const data = message.serialize()
         console.log(`Sending data: ${data.length}`)
         this._ws.send(data)
     }
 
-    onMessage?: (message: MessageT) => void;
+    onMessage?: (message: TerminalRequest) => void;
 
     async disconnectAsync(code?: number, reason?: string): Promise<void> {
         if (this._ws) {
@@ -129,7 +129,7 @@ class WebSocketManager implements IWebSocketManager, IMessageStream {
                 const uintArray = new Uint8Array(buffer)
                 const bb = new flatbuffers.ByteBuffer(uintArray);
                 const message = Message.getRootAsMessage(bb).unpack();
-                if (this.onMessage) this.onMessage(message)
+                if (this.onMessage) this.onMessage(new TerminalRequest(message))
             }
 
             setTimeout(async () => {
