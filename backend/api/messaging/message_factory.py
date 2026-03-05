@@ -1,14 +1,12 @@
 ﻿import flatbuffers
 
-from generated.Edgar import Message
 from messaging.client_models import TerminalRequest, known_headers, ContentType, SignalType
-from messaging.ollama import OllamaToolCall, OllamaRole
+from messaging.ollama import OllamaToolCall, OllamaRole, TerminalRequestJson
 from sessions.models import ChatMessage
 
 
-def parse_message(b: bytes) -> Message.MessageT:
-    message = Message.Message.GetRootAs(b, 0)
-    return Message.MessageT.InitFromObj(message)
+def parse_message(b: bytes) -> TerminalRequestJson:
+    return  TerminalRequestJson.model_validate_json(b)
 
 
 async def partial_content_response(r: TerminalRequest, content: str, chunk_id: int, role: str):

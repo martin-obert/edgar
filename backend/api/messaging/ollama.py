@@ -46,3 +46,11 @@ class PendingToolCall(OllamaToolCall):
     @property
     def is_resolved(self):
         return self.response is not None
+
+class HeaderValue(BaseModel):
+    name: str
+    value: str | None
+
+class TerminalRequestJson(BaseModel):
+    headers: list[HeaderValue] = []
+    body: str | None = None

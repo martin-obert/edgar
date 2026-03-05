@@ -17,7 +17,7 @@ const doors = ref<ShipDoor[]>([
 ])
 
 function toolCallHandler({detail}: CustomEvent<ToolCallEvent>) {
-  const func = getFunctionFromBody(detail.message.body)
+  const func = getFunctionFromBody(detail.message.body!)
   console.log(func.name)
   if (func.name === 'list_doors') {
     detail.messageManager.sendToolResponse(JSON.stringify(doors.value), detail.message.toolCallId!, detail.message.promptId!)
@@ -25,11 +25,13 @@ function toolCallHandler({detail}: CustomEvent<ToolCallEvent>) {
   }
   if (func.name === 'open_door' || func.name === 'close_door') {
     const doorName = func.arguments.door_name
-    const results = doors.value.filter(door => door.name === doorName || doorName === "*")
-    results.forEach(door => {
-      door.open = func.name === 'open_door'
-      detail.messageManager.sendToolResponse(JSON.stringify(door), detail.message.toolCallId!, detail.message.promptId!)
-    })
+    const door = doors.value.find(door => door.name === doorName)
+    if (!door) {
+      detail.messageManager.sendToolResponse(`Error ${doorName} not found`, detail.message.toolCallId!, detail.message.promptId!)
+      return
+    }
+    door.open = func.name === 'open_door'
+    detail.messageManager.sendToolResponse(JSON.stringify(door), detail.message.toolCallId!, detail.message.promptId!)
   }
 }
 

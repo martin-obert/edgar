@@ -1,8 +1,9 @@
-﻿from generated.Edgar import Message
+﻿from messaging.ollama import TerminalRequestJson
 
-def get_header_value(message: Message.MessageT, header_key: str) -> str | None:
+
+def get_header_value(message: TerminalRequestJson, header_key: str) -> str | None:
     for header in message.headers:
-        if header.name.decode('utf-8') == header_key:
-            return header.value.decode('utf-8')
+        if header.name == header_key:
+            return header.value
     return None
 

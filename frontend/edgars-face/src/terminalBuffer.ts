@@ -26,6 +26,7 @@ export function useTerminalBuffer(lineWidth: number = 50): TerminalOutputBuffer 
     });
 
     function smartSplit(text: string, maxLen = 100) {
+        if (!text) return []
         const lines = [];
         let remaining = text;
 

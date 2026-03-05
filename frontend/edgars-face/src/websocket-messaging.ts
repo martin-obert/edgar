@@ -1,29 +1,26 @@
-import {MessageT} from "./generated/edgar/message.ts";
-import {Builder} from "flatbuffers";
-import {HeaderValueT} from "./generated/edgar/header-value.ts";
 import type {OllamaFunctionCall} from "./message-manager.ts";
 
-export const getHeader = (headers: HeaderValueT[], key: string): string | undefined => {
+export const getHeader = (headers: HeaderValue[], key: string): string | undefined => {
     const idHeader = headers.find(header => header.name === key);
     if (idHeader) return getHeaderValue(idHeader)
     return undefined
 }
 
 
-export const isPartialResponse = (headers: HeaderValueT[]) => {
+export const isPartialResponse = (headers: HeaderValue[]) => {
     const val = getHeader(headers, 'partial-response')
     if (!val) return false
 
     return val.toLowerCase() === 'true' || val === '1'
 }
 
-export const getChunkId = (headers: HeaderValueT[]): number | undefined => {
+export const getChunkId = (headers: HeaderValue[]): number | undefined => {
     const n = getHeader(headers, KnownHeaders.chunk_id)
     if (!n) return undefined
     return parseInt(n)
 }
 
-export const getPromptId = (headers: HeaderValueT[]) => {
+export const getPromptId = (headers: HeaderValue[]) => {
     return getHeader(headers, KnownHeaders.prompt_id)
 }
 
@@ -55,8 +52,22 @@ export const KnownRoles = {
     assistant: 'assistant',
 }
 
+export interface HeaderValue {
+    name: string
+    value?: string
+}
+
+
+export interface TerminalRequestJson {
+    headers: HeaderValue[]
+    body?: string
+}
+
 export class TerminalRequest {
-    constructor(private readonly _message: MessageT = new MessageT()) {
+    constructor(private readonly _message: TerminalRequestJson = {
+        body: undefined,
+        headers: []
+    } as TerminalRequestJson) {
     }
 
     private addOrSetHeader(key: string, value: string) {
@@ -64,16 +75,16 @@ export class TerminalRequest {
         if (header) {
             header.value = value
         } else {
-            this._message.headers.push(new HeaderValueT(key, value))
+            this._message.headers.push({name: key, value: value})
         }
     }
 
-    get body(): string {
-        return getBody(this._message.body)
+    get body(): string | undefined {
+        return this._message.body
     }
 
-    set body(val: string) {
-        this._message.body = Array.from(new TextEncoder().encode(val));
+    set body(val: string | undefined) {
+        this._message.body = val;
     }
 
     get toolCallId(): string | undefined {
@@ -133,7 +144,7 @@ export class TerminalRequest {
     }
 }
 
-export const getContentType = (headers: HeaderValueT[]) => {
+export const getContentType = (headers: HeaderValue[]) => {
     return getHeader(headers, 'content-type')
 }
 
@@ -141,7 +152,7 @@ export const getBody = (body: number[]) => {
     return new TextDecoder().decode(new Uint8Array(body.map(b => b & 0xFF)));
 }
 
-export const getHeaderValue = (headerValueT: HeaderValueT): string | undefined => {
+export const getHeaderValue = (headerValueT: HeaderValue): string | undefined => {
 
     if (!headerValueT) return undefined;
     if (typeof headerValueT.value === 'string') {
@@ -153,13 +164,12 @@ export const getHeaderValue = (headerValueT: HeaderValueT): string | undefined =
     }
 }
 
-
-export const serializeMessage = (message: MessageT) => {
-    const b = new Builder(0)
-    b.finish(message.pack(b))
-    return b.asUint8Array()
+export const serializeMessage = (message: TerminalRequestJson): Uint8Array => {
+    return new TextEncoder().encode(JSON.stringify(message))
 }
-
-export const getFunctionFromBody = (body: string) =>{
-    return  JSON.parse(body) as OllamaFunctionCall
+export const deserializeMessage = (data: Uint8Array): TerminalRequestJson => {
+    return JSON.parse(new TextDecoder().decode(data))
+}
+export const getFunctionFromBody = (body: string) => {
+    return JSON.parse(body) as OllamaFunctionCall
 }
