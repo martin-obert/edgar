@@ -30,7 +30,6 @@ function toolCallHandler({detail}: CustomEvent<ToolCallEvent>) {
       door.open = func.name === 'open_door'
       detail.messageManager.sendToolResponse(JSON.stringify(door), detail.message.toolCallId!, detail.message.promptId!)
     })
-    detail.messageManager.sendToolResponse(`Doors ${doorName} not found`, detail.message.toolCallId!, detail.message.promptId!)
   }
 }
 

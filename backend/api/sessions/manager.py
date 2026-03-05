@@ -132,4 +132,4 @@ class SessionManager:
         for tc in self._pending_tool_calls:
             if tc.is_resolved:
                 self.append_chat_message(pending_tool_call_response(tc.function.name, tc.response))
-
+        self._pending_tool_calls = []

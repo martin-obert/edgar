@@ -87,15 +87,13 @@ const validModels = ['qwen3:4b', 'qwen2.5:7b', 'qwen2.5:3b']
                 </Message>
               </IftaLabel>
             </Fieldset>
-            <Fieldset legend="Tools" :toggleable="true" :collapsed="true">
-              <div v-for="(tool, index) in initialValues.all_tools" :key="tool.function.name">
-                <ToolEditor v-model:tool="initialValues.all_tools[index]!" class="mb-2"/>
-                <Button label="Remove" @click="initialValues.all_tools.splice(initialValues.all_tools.indexOf(tool), 1)"/>
-              </div>
-              <Button label="Add"
-                      @click="initialValues.all_tools.push(JSON.parse(defaultTemplate))"/>
+            <Fieldset legend="Model Options" :toggleable="true" :collapsed="true">
+              <IftaLabel>
 
-              <Button label="Add Doors module" @click="initialValues.all_tools.push(...toolDefinitions)"></Button>
+              </IftaLabel>
+            </Fieldset>
+            <Fieldset legend="Tools" :toggleable="true" :collapsed="true">
+              <Button label="Add Doors module" v-if="initialValues.all_tools && initialValues.all_tools.every(t => t.function.name !== 'list_doors')" @click="initialValues.all_tools.push(...toolDefinitions)"></Button>
             </Fieldset>
           </div>
         </template>

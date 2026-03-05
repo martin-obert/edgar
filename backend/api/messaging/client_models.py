@@ -67,6 +67,7 @@ class TerminalRequest:
         self.websocket = websocket
         self.__id: str | None = None
         self.__body: str | None = None
+        self.assistant_responded = False
 
     @property
     def id(self) -> str:

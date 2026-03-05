@@ -3,11 +3,13 @@ from typing import Any
 
 from pydantic import BaseModel
 
+
 class OllamaRole(str, Enum):
     user = 'user'
     tool = 'tool'
     system = 'system'
     assistant = 'assistant'
+
 
 class OllamaFunction(BaseModel):
     name: str = ""
@@ -36,6 +38,7 @@ class OllamaResponse(BaseModel):
     done: bool | None = False
     done_reason: str | None = None
     total_duration: int | None = None
+
 
 class PendingToolCall(OllamaToolCall):
     response: str | None = None

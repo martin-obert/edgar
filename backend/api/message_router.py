@@ -1,6 +1,7 @@
 ﻿from collections import defaultdict
 from os import getenv
 import logging
+from typing import Any
 
 import httpx
 from fastapi.routing import request_response
@@ -24,6 +25,9 @@ async def _chat(request: TerminalRequest, session_manager: sessions.manager.Sess
         tools = [t.model_dump() for t in session_manager.configuration.all_tools]
         base_url = getenv("API_BASE_URL")
         url = f"{base_url}/api/chat"
+        options = None
+        if session_manager.configuration.options:
+            options = session_manager.configuration.options.model_dump(exclude_none=True)
         logger.info(f"Sending request to {url}")
         async  with client.stream('POST', url,
                                   timeout=60.0,
@@ -40,7 +44,8 @@ async def _chat(request: TerminalRequest, session_manager: sessions.manager.Sess
                                           *chat
                                       ],
                                       'tools': tools,
-                                      'stream': True
+                                      'stream': True,
+                                      'options': options,
                                   }) as r:
             logger.info(f"Response status: {r.status_code}")
 
@@ -88,11 +93,27 @@ async def process_chunks(r: Response, request: TerminalRequest,
 
     if content is None and tc is None:
         logger.warning("No content or tool calls found in the response, maybe thinking?")
-        return
+        return None
 
     logger.info(f"Tool calls: {session_manager.pending_tool_calls}")
 
     session_manager.append_chat_message(ChatMessage(role=OllamaRole.assistant, content=content, tool_calls=tc))
+    session_manager.pending_request.assistant_responded = True
+
+    await process_tool_calls(request, session_manager)
+
+    try_clear_request(session_manager)
+    return None
+
+
+def try_clear_request(session_manager: SessionManager) -> Any:
+    if (session_manager.all_tool_calls_resolved and
+            session_manager.pending_request and
+            session_manager.pending_request.assistant_responded):
+        logger.info(f"Clearing pending request: {session_manager.pending_request.id}")
+        session_manager.clear_pending()
+
+    return None
 
 
 async def handle_user_prompt(request: TerminalRequest, session_manager: sessions.manager.SessionManager):
@@ -100,7 +121,6 @@ async def handle_user_prompt(request: TerminalRequest, session_manager: sessions
         raise ValueError(f"Expected role to be user, got {request.role}")
 
     if not session_manager.has_pending_request:
-
         session_manager.pending_request = request
     else:
         if request.id is not session_manager.pending_request.id:
@@ -130,17 +150,31 @@ async def handle_tool_response(request: TerminalRequest, session_manager: Sessio
         logger.warning(f"Received tool response for unexpected request ID: {request.id}")
         return None
 
-
     # Remove a pending tool call from the session manager
     session_manager.resolve_pending_tool_call(request.tool_call_id, request.body)
     logger.info(f"Resolved tool call: {request.tool_call_id}")
 
-    if session_manager.has_pending_tool_calls and session_manager.all_tool_calls_resolved:
-        session_manager.dump_tool_calls_to_chat()
-        logger.info(f"All tool calls resolved")
-        return await _chat(request, session_manager)
+    await process_tool_calls(request, session_manager)
 
+    try_clear_request(session_manager)
     return None
+
+
+async def process_tool_calls(request: TerminalRequest, session_manager: SessionManager) -> Any:
+    if not session_manager.has_pending_tool_calls:
+        logger.info(f"No tool calls pending for {request.id}")
+        return None
+
+    if not session_manager.pending_request.assistant_responded:
+        logger.info(f"Assistant has not responded yet {request.id}, waiting for assistant to respond")
+
+    if not session_manager.all_tool_calls_resolved:
+        logger.info(f"Not all tool calls resolved yet for {request.id}, waiting for more tool calls")
+        return None
+
+    logger.info("Assistant already responded, can process tool calls now")
+    session_manager.dump_tool_calls_to_chat()
+    return await _chat(request, session_manager)
 
 
 async def handle(request: TerminalRequest, session_manager: sessions.manager.SessionManager):
