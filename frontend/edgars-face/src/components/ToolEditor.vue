@@ -1,21 +1,30 @@
 <script setup lang="ts">
-import {ref} from "vue";
+import {computed, ref} from "vue";
+import JsonEditorVue from 'json-editor-vue'
+import type {OllamaToolDefinition} from "../rest.api.ts";
 
-const toolModel = defineModel('tool', {
+const toolModel = defineModel<OllamaToolDefinition>('tool', {
   required: true
 })
 const editing = ref(false)
-const definition = ref(JSON.stringify(toolModel.value, null, 2))
+const definition = computed(() => JSON.stringify(toolModel.value, null, 2))
+const v = computed({
+  get: () => toolModel.value,
+  set: (value: string) => toolModel.value = JSON.parse(value)
+})
 </script>
 
 <template>
   <Panel>
-
-    <Textarea v-model="definition" v-if="editing" class="w-full"></Textarea>
+    <JsonEditorVue v-if="editing"
+        v-model="v"
+        mode="text"
+        :navigation-bar="false"
+    />
     <p v-else>
-      {{definition }}}
+      {{ definition }}}
     </p>
-    <Button @click="editing = true" :label="editing ? 'Save' : 'Edit'" severity="secondary"/>
+    <Button @click="editing = !editing" :label="editing ? 'Save' : 'Edit'" severity="secondary"/>
   </Panel>
 </template>
 

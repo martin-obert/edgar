@@ -15,7 +15,7 @@ const {
 } = useAsyncState<SessionConfiguration>(
     () => backend.rest.getSessionConfiguration(sessionId),
     {} as SessionConfiguration,
-    { immediate: true, resetOnExecute: false, shallow: false }
+    {immediate: true, resetOnExecute: false, shallow: false}
 )
 
 const toast = useToast();
@@ -37,7 +37,8 @@ const resolver = ({values}: FormResolverOptions): Record<string, any> | Promise<
 const onFormSubmit = async ({valid, values}: FormSubmitEvent) => {
   if (valid) {
     try {
-      await backend.rest.updateSessionConfiguration(sessionId, values as SessionConfiguration)
+      const tools = initialValues.value.all_tools
+      await backend.rest.updateSessionConfiguration(sessionId, {...values, all_tools: tools} as SessionConfiguration)
       toast.add({
         severity: 'success',
         summary: 'Updated',
@@ -81,12 +82,14 @@ const validModels = ['qwen3:4b', 'qwen2.5:7b', 'qwen2.5:3b']
               </Message>
             </IftaLabel>
           </Fieldset>
-          <div v-for="tool in initialValues.all_tools" :key="tool.function.name">
-            <ToolEditor :tool="tool" class="mb-2"/>
-            <Button label="Remove" @click="initialValues.all_tools.splice(initialValues.all_tools.indexOf(tool), 1)"/>
-          </div>
-          <Button label="Add"
-                  @click="initialValues.all_tools.push(JSON.parse(defaultTemplate))"/>
+          <Fieldset legend="Tools" :toggleable="true" :collapsed="true">
+            <div v-for="(tool, index) in initialValues.all_tools" :key="tool.function.name">
+              <ToolEditor v-model:tool="initialValues.all_tools[index]!" class="mb-2"/>
+              <Button label="Remove" @click="initialValues.all_tools.splice(initialValues.all_tools.indexOf(tool), 1)"/>
+            </div>
+            <Button label="Add"
+                    @click="initialValues.all_tools.push(JSON.parse(defaultTemplate))"/>
+          </Fieldset>
         </div>
       </template>
       <template #footer>
