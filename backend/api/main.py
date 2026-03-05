@@ -19,7 +19,7 @@ from sessions.models import SessionConfig
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("api")
-
+ 
 load_dotenv()  # reads variables from a .env file and sets them in os.environ
 
 active_sessions: dict[UUID, SessionManager] = {}

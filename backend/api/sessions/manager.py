@@ -24,6 +24,10 @@ class SessionManager:
         self._config_file = self._get_root_dir() / f"{session_id}_config.json"
 
     @property
+    def pending_tool_calls(self):
+        return self._pending_tool_calls
+
+    @property
     def configuration(self):
         return self._load_config()._config
 
@@ -108,7 +112,7 @@ class SessionManager:
         pending = PendingToolCall(**tool_call.model_dump())
         self._pending_tool_calls.append(pending)
 
-    def clear_pending_request(self):
+    def clear_pending(self):
         self._pending_tool_calls = []
         self.pending_request = None
 
@@ -123,11 +127,9 @@ class SessionManager:
         for tc in self._pending_tool_calls:
             if tc.id == tool_call_id:
                 tc.response = result
-                return
 
     def dump_tool_calls_to_chat(self):
         for tc in self._pending_tool_calls:
             if tc.is_resolved:
                 self.append_chat_message(pending_tool_call_response(tc.function.name, tc.response))
 
-        self.clear_pending_request()
