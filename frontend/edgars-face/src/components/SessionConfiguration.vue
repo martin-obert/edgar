@@ -64,7 +64,7 @@ const validModels = ['qwen3:4b', 'qwen2.5:7b', 'qwen2.5:3b']
 
 <template>
   <div class="w-full">
-    <Form v-if="isReady" v-slot="$form" :initialValues :resolver @submit="onFormSubmit" class="w-full m-1 my-3">
+    <Form v-if="isReady" v-slot="$form" :initialValues :resolver @submit="onFormSubmit" class="w-full">
       <Card>
         <template #title>
           Configuration
