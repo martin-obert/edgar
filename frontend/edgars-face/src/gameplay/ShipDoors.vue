@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import {onMounted, onUnmounted, ref} from "vue";
+import {ref} from "vue";
 import {getFunctionFromBody} from "../websocket-messaging.ts";
 import type {ToolCallEvent} from "../message-manager.ts";
+import {useEventListener} from "@vueuse/core";
 
 interface ShipDoor {
   name: string,
@@ -20,6 +21,7 @@ function toolCallHandler({detail}: CustomEvent<ToolCallEvent>) {
   console.log(func.name)
   if (func.name === 'list_doors') {
     detail.messageManager.sendToolResponse(JSON.stringify(doors.value), detail.message.toolCallId!, detail.message.promptId!)
+    return
   }
   if (func.name === 'open_door' || func.name === 'close_door') {
     const doorName = func.arguments.door_name
@@ -27,20 +29,14 @@ function toolCallHandler({detail}: CustomEvent<ToolCallEvent>) {
     if (door) {
       door.open = func.name === 'open_door'
       detail.messageManager.sendToolResponse(JSON.stringify(door), detail.message.toolCallId!, detail.message.promptId!)
+      return;
     }
     detail.messageManager.sendToolResponse(`Doors ${doorName} not found`, detail.message.toolCallId!, detail.message.promptId!)
-
   }
 }
 
-onMounted(() => {
-  //@ts-ignore
-  window.addEventListener('toolCall', toolCallHandler);
-})
+useEventListener(window, 'toolCall', toolCallHandler)
 
-onUnmounted(() => {
-  window.removeEventListener('toolCall', toolCallHandler);
-})
 </script>
 
 <template>
