@@ -129,6 +129,7 @@ def End(builder):
     return MessageEnd(builder)
 
 import Edgar.HeaderValue
+
 try:
     from typing import List
 except:

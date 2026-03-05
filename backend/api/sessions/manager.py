@@ -1,38 +1,22 @@
-﻿from pathlib import Path
+﻿import uuid
 import logging
+from pathlib import Path
 
-import uuid
-from pydantic import BaseModel, TypeAdapter
+from messaging.client_models import TerminalRequest
+from messaging.message_factory import pending_tool_call_response
+from messaging.ollama import PendingToolCall, OllamaToolCall
+from sessions.models import SessionConfig, ChatMessage, default_session_configuration, adapter
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("api/sessions")
-
-
-class ChatMessage(BaseModel):
-    role: str
-    content: str
-    thinking: str | None = None
-
-
-class ShipSystem(BaseModel):
-    name: str
-
-
-_default_systems: list[ShipSystem] = []
-
-
-class SessionConfig(BaseModel):
-    model: str
-    system_prompt: str | None = None
-    ship_system: list[ShipSystem] = _default_systems
-
-
-default_session_configuration = SessionConfig(model='qwen2.5:3b', system_prompt='You are a helpful assistant.')
-adapter = TypeAdapter(list[ChatMessage])
+logger = logging.getLogger("sessions/manager")
 
 
 class SessionManager:
     def __init__(self, session_id: uuid.UUID):
+
+        # TODO: Transient, make persistent!
+        self.pending_request: TerminalRequest | None = None
+        self._pending_tool_calls: list[PendingToolCall] = []
         self._session_id = session_id
         self._chat_messages: list[ChatMessage] | None = None
         self._config: SessionConfig | None = None
@@ -111,3 +95,39 @@ class SessionManager:
 
     def append_chat_message(self, message: ChatMessage):
         self._load_chat()._chat_messages.append(message)
+
+    @property
+    def has_pending_request(self):
+        return self.pending_request is not None
+
+    @property
+    def has_pending_tool_calls(self):
+        return len(self._pending_tool_calls) > 0
+
+    def add_pending_tool_call(self, tool_call: OllamaToolCall):
+        pending = PendingToolCall(**tool_call.model_dump())
+        self._pending_tool_calls.append(pending)
+
+    def clear_pending_request(self):
+        self._pending_tool_calls = []
+        self.pending_request = None
+
+    @property
+    def all_tool_calls_resolved(self):
+        for tc in self._pending_tool_calls:
+            if not tc.is_resolved:
+                return False
+        return True
+
+    def resolve_pending_tool_call(self, tool_call_id: str, result: str):
+        for tc in self._pending_tool_calls:
+            if tc.id == tool_call_id:
+                tc.response = result
+                return
+
+    def dump_tool_calls_to_chat(self):
+        for tc in self._pending_tool_calls:
+            if tc.is_resolved:
+                self.append_chat_message(pending_tool_call_response(tc.function.name, tc.response))
+
+        self.clear_pending_request()

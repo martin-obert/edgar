@@ -1,6 +1,24 @@
 export interface SessionConfiguration {
     model: string
     system_prompt: string
+    all_tools: OllamaToolDefinition[]
+}
+
+export interface OllamaFunctionParameters {
+    type: string
+    properties: Record<string, any>
+    required?: string[]
+}
+
+export interface OllamaFunctionDefinition {
+    name: string
+    description: string
+    parameters: OllamaFunctionParameters
+}
+
+export interface OllamaToolDefinition {
+    type: string
+    function: OllamaFunctionDefinition
 }
 
 export interface IRestApi {

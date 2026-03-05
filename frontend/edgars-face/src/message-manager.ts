@@ -1,10 +1,7 @@
-import type {MessageT} from "./generated/edgar/message.ts";
 import {
-    createWebSocketMessage,
-    getBody, getChunkId,
-    getRequestId,
-    isPartialResponse,
-    messageType
+    ContentType,
+    KnownRoles,
+    TerminalRequest,
 } from "./websocket-messaging.ts";
 import {v4 as uuidv4} from "uuid";
 
@@ -60,27 +57,26 @@ class WsRequestWrapper implements WsRequest {
         })
     }
 
-    onMessage(message: MessageT): void {
+    onMessage(message: TerminalRequest): void {
         if (this.hasCompleted) return
 
-        const id = getRequestId(message.headers)
-        if (!id) {
+        if (!message.promptId) {
             console.error("No id header found")
             return
         }
-        if (id !== this.id) {
-            console.error("Id mismatch: ", id, " != ", this.id)
+        if (message.promptId !== this.id) {
+            console.error("Id mismatch: ", message.promptId, " != ", this.id)
             return
         }
 
-        const isPartial = isPartialResponse(message.headers)
-        this._state = isPartial ? 'pending' : 'complete'
-        const chunkId = getChunkId(message.headers)
+        if (message.isSignalRequestComplete)
+            this._state = 'complete'
+
         if (this._onResponse)
             this._onResponse({
-                content: getBody(message.body),
+                content: message.body,
                 complete: this.hasCompleted,
-                chunkId: chunkId ?? 0
+                chunkId: message.chunkId ?? 0
             })
 
         if (this.hasCompleted)
@@ -135,23 +131,48 @@ export interface IMessageStream {
 
     get canRead(): boolean;
 
-    onMessage?: (message: MessageT) => void;
-    sendMessage: (message: MessageT) => void;
+    onMessage?: (message: TerminalRequest) => void;
+    sendMessage: (message: TerminalRequest) => void;
 }
 
 export interface IMessageManager {
     init(): void;
 
-    dispose(): void;
+    get activeRequestId(): string | undefined;
 
+    dispose(): void;
+    sendToolResponse(content: string, toolCallId: string, promptId: string ): void
     sendPromptRequest(content: string, options: {
         onResponse: (response: WsResponseChunk) => void
     }): WsRequest;
+
+}
+
+
+export interface OllamaFunctionCall {
+    name: string,
+    index: number,
+    arguments: Record<string, any>
+}
+
+export interface OllamaToolCall {
+    id?: string
+    type?: string
+    function?: OllamaFunctionCall
+}
+
+export interface ToolCallEvent {
+    message: TerminalRequest,
+    messageManager: IMessageManager
 }
 
 class MessageManager implements IMessageManager {
-    private readonly _inboxBuffer: MessageT[] = []
-    private readonly _outboxBuffer: MessageT[] = []
+    private readonly _inboxBuffer: TerminalRequest[] = []
+    private readonly _outboxBuffer: TerminalRequest[] = []
+    private _activeRequestId: string | undefined
+    get activeRequestId() {
+        return this._activeRequestId
+    }
 
     private _currentPrompt: WsRequestWrapper | undefined;
 
@@ -159,6 +180,20 @@ class MessageManager implements IMessageManager {
     private readonly loopTimeout: number = 100;
 
     constructor(private readonly _messageStream: IMessageStream) {
+    }
+
+
+    sendToolResponse(content: string, toolCallId: string, promptId: string ) {
+        if (!this._messageStream.canWrite) {
+            throw new MessageManagerError("Message stream is not writable", 'STREAM_NOT_WRITABLE')
+        }
+        const message = new TerminalRequest()
+        message.role = KnownRoles.tool
+        message.body = content
+        message.contentType = ContentType.json
+        message.toolCallId = toolCallId
+        message.promptId = promptId
+        this._outboxBuffer.push(message)
     }
 
     sendPromptRequest(content: string, options: {
@@ -175,10 +210,15 @@ class MessageManager implements IMessageManager {
             throw new MessageManagerError("Message stream is not writable", 'STREAM_NOT_WRITABLE')
         }
 
-        const id = uuidv4()
-        this._currentPrompt = new WsRequestWrapper(id, options.onResponse)
+        this._activeRequestId = uuidv4()
+        this._currentPrompt = new WsRequestWrapper(this._activeRequestId, options.onResponse)
 
-        this._outboxBuffer.push(createWebSocketMessage(content, {id: id, type: messageType.PROMPT_REQUEST}))
+        const message = new TerminalRequest()
+        message.promptId = this._activeRequestId
+        message.role = KnownRoles.user
+        message.body = content
+        message.contentType = ContentType.text_plain
+        this._outboxBuffer.push(message)
 
         return this._currentPrompt
     }
@@ -207,16 +247,30 @@ class MessageManager implements IMessageManager {
             for (let i = 0; i < this._inboxBuffer.length; i++) {
                 const inMessage = this._inboxBuffer[i]
                 if (!inMessage) continue
-                const messageId = getRequestId(inMessage.headers)
-                const isPartial = isPartialResponse(inMessage.headers)
-                const body = getBody(inMessage.body)
-                const chunkId = getChunkId(inMessage.headers)
-                console.log(`Processing message: ${messageId} - ${isPartial ? 'PARTIAL' : 'FULL'} - ${chunkId} - ${body}`)
+                console.log(`Processing message: ${inMessage.promptId} - ${inMessage.chunkId} - ${inMessage.body} - toolCallId: ${inMessage.toolCallId} - signalType: ${inMessage.signalType}`)
 
-                if (this._currentPrompt && this._currentPrompt.id === messageId) {
-                    this._currentPrompt.onMessage(inMessage)
-                    if (this._currentPrompt.hasCompleted)
-                        this._currentPrompt = undefined
+                if (inMessage.isSignalRequestComplete) {
+                    this._activeRequestId = undefined
+                }
+
+                switch (inMessage.role) {
+                    case KnownRoles.assistant:
+                        if (this._currentPrompt) {
+                            this._currentPrompt.onMessage(inMessage)
+                            if (this._currentPrompt.hasCompleted)
+                                this._currentPrompt = undefined
+                        }
+                        break
+                    case KnownRoles.tool:
+                        window.dispatchEvent(new CustomEvent('toolCall', {
+                            detail: {
+                                message: inMessage,
+                                messageManager: this
+                            } as ToolCallEvent
+                        }))
+                        break
+                    default:
+                        throw new Error("Unknown role: " + inMessage.role)
                 }
             }
 
