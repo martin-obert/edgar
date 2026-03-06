@@ -1,7 +1,5 @@
-import {Message} from "./generated/edgar.ts";
-import * as flatbuffers from "flatbuffers";
 import type {IMessageStream} from "./message-manager.ts";
-import {TerminalRequest} from "./websocket-messaging.ts";
+import {deserializeMessage, TerminalRequest} from "./websocket-messaging.ts";
 
 export enum WsError {
     UNINITIALIZED = 0,
@@ -68,7 +66,6 @@ class WebSocketManager implements IWebSocketManager, IMessageStream {
         if (this.state !== WebSocketState.OPEN)
             throw new WebSocketManagerError(`Invalid state: ${this.state}`, WsError.INVALID_STATE)
 
-
         const data = message.serialize()
         console.log(`Sending data: ${data.length}`)
         this._ws.send(data)
@@ -127,9 +124,7 @@ class WebSocketManager implements IWebSocketManager, IMessageStream {
                     ? await e.data.arrayBuffer()
                     : e.data;
                 const uintArray = new Uint8Array(buffer)
-                const bb = new flatbuffers.ByteBuffer(uintArray);
-                const message = Message.getRootAsMessage(bb).unpack();
-                if (this.onMessage) this.onMessage(new TerminalRequest(message))
+                if (this.onMessage) this.onMessage(new TerminalRequest(deserializeMessage(uintArray)))
             }
 
             setTimeout(async () => {

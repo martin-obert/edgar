@@ -24,8 +24,10 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="flex flex-row gap-2">
+  <div class="flex flex-row gap-2 m-2">
+  <div>
     <EdgarsTerminal :commands="gameCommands"/>
+  </div>
     <SessionConfiguration :sessionId="sessionId"/>
   </div>
 </template>

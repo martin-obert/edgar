@@ -74,7 +74,7 @@ class WsRequestWrapper implements WsRequest {
 
         if (this._onResponse)
             this._onResponse({
-                content: message.body,
+                content: message.body!,
                 complete: this.hasCompleted,
                 chunkId: message.chunkId ?? 0
             })

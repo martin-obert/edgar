@@ -104,10 +104,9 @@ onKeyStroke('Escape', (e) => {
 </script>
 
 <template>
-  <div class="flex flex-col items-center justify-center" @click="commandInput?.focus()"
-       style="max-width: 50%; max-height: 50%;">
-    <div class="bezel">
-      <div :style="{width: `${lineLen}ch`}" class="crt monitor fx-scanlines fx-rgb fx-flicker fx-curve fx-glow fx-roll"
+  <div class="flex flex-col items-center justify-center" @click="commandInput?.focus()">
+    <div class="bezel" style="width: 100ch">
+      <div class="crt monitor fx-scanlines fx-rgb fx-flicker fx-curve fx-glow fx-roll"
            id="green">
         <div class="content" :style="{margin: '1em', marginBottom: '1.5em'}">
           <div style="font-family: 'VT323', monospace" :style="{height: `${messageStackSize+1}lh`}">

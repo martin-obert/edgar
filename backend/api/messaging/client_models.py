@@ -2,13 +2,10 @@
 import logging
 from enum import Enum
 
-import flatbuffers
 from starlette.websockets import WebSocket
 
-from generated.Edgar.HeaderValue import HeaderValueT
-from generated.Edgar import Message
-from generated.Edgar.Message import MessageT
 from messaging.headers import get_header_value
+from messaging.ollama import TerminalRequestJson, HeaderValue
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("messaging/client_models")
@@ -45,24 +42,22 @@ known_headers = MessageHeaders(prompt_id="prompt-id",
                                signal="signal")
 
 
-def _create_message(body: bytes | None, headers: dict[str, str]):
+def _create_message(body: str | None, headers: dict[str, str]) -> bytes:
     """Serializes a message with headers and body into flatbuffers bytes"""
-    builder = flatbuffers.Builder(0)
-    req = Message.MessageT()
+    req = TerminalRequestJson()
     req.headers = []
     for key, value in headers.items():
-        req.headers.append(HeaderValueT(key, value))
+        req.headers.append(HeaderValue(name=key, value=value))
 
     if body is not None:
         req.body = body
 
-    builder.Finish(req.Pack(builder))
-
-    return builder.Output()
+    json_str = req.model_dump_json()  # str
+    return json_str.encode()
 
 
 class TerminalRequest:
-    def __init__(self, message: MessageT, websocket: WebSocket):
+    def __init__(self, message: TerminalRequestJson, websocket: WebSocket):
         self.message = message
         self.websocket = websocket
         self.__id: str | None = None
@@ -78,12 +73,11 @@ class TerminalRequest:
     @property
     def body(self) -> str | None:
         if self.__body is None:
-            self.__body = bytes(b & 0xFF for b in self.message.body).decode('utf-8')
+            self.__body = self.message.body
         return self.__body
 
     async def respond(self, message: str, headers: dict[str, str]):
-        data = message.encode('utf-8')
-        bytes_data = _create_message(data, headers)
+        bytes_data = _create_message(message, headers)
         logger.info(
             f"Sending message with id {self.id} to websocket: {len(bytes_data)}"
         )

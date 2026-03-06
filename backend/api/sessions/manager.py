@@ -29,7 +29,7 @@ class SessionManager:
 
     @property
     def configuration(self):
-        return self._load_config()._config
+        return self._config
 
     @property
     def chat_messages(self):
@@ -45,19 +45,6 @@ class SessionManager:
     def _get_config_file_name(self):
         return f"{self._get_root_dir()}{self._session_id}_config.json"
 
-    def _load_config(self):
-        if self._config:
-            return self
-
-        if not self._config_file.exists():
-            self._config = default_session_configuration
-            return self
-
-        with open(self._config_file, "r", encoding="utf-8") as f:
-            logger.info(f"Reading config file: {self._config_file}")
-            self._config = SessionConfig.model_validate_json(f.read())
-            return self
-
     def _load_chat(self):
         if self._chat_messages:
             return self
@@ -70,16 +57,6 @@ class SessionManager:
             logger.info(f"Reading chat file: {self._chat_file}")
             self._chat_messages = adapter.validate_json(f.read())
             return self
-
-    def save_config(self):
-        if not self._config:
-            return self
-
-        logger.info(f"Saving config file: {self._config_file}")
-        with open(self._config_file, "w", encoding="utf-8") as f:
-            f.write(adapter.dump_json(self._config).decode())
-        logger.info(f"Session file saved: {self._config_file}")
-        return self
 
     def save_chat(self):
         if not self._chat_messages:
