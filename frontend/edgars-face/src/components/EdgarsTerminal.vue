@@ -117,13 +117,12 @@ onKeyStroke('Escape', (e) => {
             </p>
             <i style="margin: 0 1ch 0 -2ch;display:inline-block;position:absolute">&gt;</i>
             <input name="commandInput"
+                   :placeholder="messages.length === 0 ? 'help' : (renderingBuffer || currentCommand !== undefined) ? 'Processing ... (ESC)' : 'Enter command'"
                    class="w-full"
-                   v-if="!renderingBuffer && !currentCommand"
+                   :disabled="renderingBuffer || currentCommand !== undefined"
                    ref="commandInput"
                    v-on:keyup.enter="executeCommand(($event.target as HTMLInputElement).value)"/>
           </div>
-          <div v-if="renderingBuffer || currentCommand"><p style="margin: 0;">Processing ... (ESC)</p></div>
-          <div v-else>&nbsp;</div>
         </div>
         <div class="vignette"></div>
         <div class="rolling-bar"></div>
