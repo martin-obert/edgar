@@ -40,17 +40,26 @@ function toolCallHandler({detail}: CustomEvent<ToolCallEvent>) {
 }
 
 useEventListener(window, 'toolCall', toolCallHandler)
-
+const getDoorColor = (state:string)=>{
+  switch (state) {
+    case 'open':
+      return 'green'
+    case 'closed':
+      return 'orange'
+    case 'jammed':
+      return 'red'
+    case 'locked':
+      return 'gray'
+  }
+}
 </script>
 
 <template>
   <Panel header="Doors">
-    <div class="grid grid-cols-2 gap-2">
-      <div v-for="door in doors" class="flex flex-row justify-items-start gap-2">
-      <span :style="{color: door.state ? 'green' : 'red'}">
-        <span>{{ door.id }} </span><i class="pi" :class="!door.state ? 'pi-lock' : 'pi-lock-open'"></i>
-      </span>
-
+    <div class="grid grid-cols-2 gap-2 justify-center">
+      <div v-for="door in doors" class="flex flex-row justify-items-start gap-2 justify-center">
+        <span>{{ door.id }} </span><img src="/assets/door.png" style="max-height: 2rem;"  alt="Door"/>
+        <span :style="{color: getDoorColor(door.state)}" >{{door.state}}</span>
       </div>
     </div>
   </Panel>

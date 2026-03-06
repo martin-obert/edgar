@@ -13,7 +13,7 @@ export const doorsToolDefinitions: OllamaToolDefinition[] = [{
         type: "function",
         function: {
             name: "set_door_state",
-            description: "Set doors to one of the following states: locked, open, closed, jammed.",
+            description: "Set doors to one of the following states: locked, open, closed. Jammed doors cannot be changed.",
             parameters: {
                 type: "object",
                 properties: {

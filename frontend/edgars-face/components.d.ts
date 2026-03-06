@@ -12,7 +12,6 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     Button: typeof import('primevue/button')['default']
-    Card: typeof import('primevue/card')['default']
     CypherSentence: typeof import('./src/components/CypherSentence.vue')['default']
     CypherWord: typeof import('./src/components/CypherWord.vue')['default']
     EdgarsTerminal: typeof import('./src/components/EdgarsTerminal.vue')['default']
@@ -21,7 +20,6 @@ declare module 'vue' {
     FormField: typeof import('@primevue/forms/formfield')['default']
     IftaLabel: typeof import('primevue/iftalabel')['default']
     InputNumber: typeof import('primevue/inputnumber')['default']
-    InputText: typeof import('primevue/inputtext')['default']
     Menubar: typeof import('primevue/menubar')['default']
     Message: typeof import('primevue/message')['default']
     Panel: typeof import('primevue/panel')['default']
