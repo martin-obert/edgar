@@ -9,7 +9,7 @@ const {commands} = defineProps<{ commands: TerminalCommand[] }>()
 const messages = ref<TerminalMessage[]>([])
 const commandInput = ref<HTMLInputElement | null>(null)
 const messageStackSize = 5
-const lineLen = 100
+
 onMounted(() => {
   if (commandInput.value) {
     commandInput.value.focus()

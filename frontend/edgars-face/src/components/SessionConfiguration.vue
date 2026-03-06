@@ -115,7 +115,8 @@ const changeTo = async (sessionId: string) => {
         </template>
         <template #header>
           <div>
-            Session <Select optionLabel="" :options="sessionList" :modelValue="sessionId" @valueChange="value => changeTo(value)" name="model"></Select>
+            Session <Select optionLabel="" :options="sessionList" :modelValue="sessionId"
+                            @valueChange="(value:string) => changeTo(value)" name="model"></Select>
           </div>
         </template>
         <div class="grid grid-cols-2 gap-2 h-full">
@@ -141,7 +142,7 @@ const changeTo = async (sessionId: string) => {
                        :initialValue="currentSession.options.seed">
               <IftaLabel>
                 <InputNumber :modelValue="$field.value"
-                             @update:modelValue="(val) => $field.onChange(val)"
+                             @update:modelValue="(val) => ($field as any).onChange(val)"
                              :min="0" :max="1000000000" :step="1"/>
                 <label>seed</label>
               </IftaLabel>
@@ -150,7 +151,7 @@ const changeTo = async (sessionId: string) => {
                        :initialValue="currentSession.options.num_ctx">
               <IftaLabel>
                 <InputNumber :modelValue="$field.value"
-                             @update:modelValue="(val) => $field.onChange(val)"
+                             @update:modelValue="(val) => ($field as any).onChange(val)"
                              :min="0" :max="1000000000" :step="1"/>
                 <label>num_ctx</label>
               </IftaLabel>
@@ -159,7 +160,7 @@ const changeTo = async (sessionId: string) => {
                        :initialValue="currentSession.options.num_predict">
               <IftaLabel>
                 <InputNumber :modelValue="$field.value"
-                             @update:modelValue="(val) => $field.onChange(val)"
+                             @update:modelValue="(val) => ($field as any).onChange(val)"
                              :min="0" :max="1000000000" :step="1"/>
                 <label>num_predict</label>
               </IftaLabel>
@@ -168,7 +169,7 @@ const changeTo = async (sessionId: string) => {
                        :initialValue="currentSession.options.temperature">
               <IftaLabel>
                 <InputNumber :modelValue="$field.value"
-                             @update:modelValue="(val) => $field.onChange(val)"
+                             @update:modelValue="(val) => ($field as any).onChange(val)"
                              :min="0" :max="2" :step="0.1"
                              :minFractionDigits="1" :maxFractionDigits="2"/>
                 <label>temperature</label>
@@ -178,7 +179,7 @@ const changeTo = async (sessionId: string) => {
                        :initialValue="currentSession.options.top_k">
               <IftaLabel>
                 <InputNumber :modelValue="$field.value"
-                             @update:modelValue="(val) => $field.onChange(val)"
+                             @update:modelValue="(val) => ($field as any).onChange(val)"
                              :min="0" :max="200" :step="0.1"
                              :minFractionDigits="1" :maxFractionDigits="2"/>
                 <label>top_k</label>
@@ -188,7 +189,7 @@ const changeTo = async (sessionId: string) => {
                        :initialValue="currentSession.options.top_p">
               <IftaLabel>
                 <InputNumber :modelValue="$field.value"
-                             @update:modelValue="(val) => $field.onChange(val)"
+                             @update:modelValue="(val) => ($field as any).onChange(val)"
                              :min="0" :max="200" :step="0.1"
                              :minFractionDigits="1" :maxFractionDigits="2"/>
                 <label>top_p</label>
