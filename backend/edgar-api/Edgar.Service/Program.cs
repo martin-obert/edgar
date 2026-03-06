@@ -1,10 +1,12 @@
 using System.Net.WebSockets;
-using Edgar.WebApi;
+using Edgar.Service;
+using Edgar.Service.Components;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebSockets;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
+
 
 builder.Host.UseSerilog((ctx, cfg) =>
     cfg
@@ -17,7 +19,7 @@ builder.Host.UseSerilog((ctx, cfg) =>
 var wsSettings = builder.Configuration.GetSection("WebSockets").Get<WebSocketSettings>() ??
                  throw new Exception("WebSockets settings not found");
 
-builder.Services.AddOpenApi();
+// builder.Services.AddOpenApi();
 builder.Services.AddWebSockets(c =>
 {
     c.KeepAliveInterval = TimeSpan.FromSeconds(wsSettings.KeepAliveIntervalSeconds);
@@ -26,19 +28,20 @@ builder.Services.AddWebSockets(c =>
         c.AllowedOrigins.Add(origin);
 });
 
-builder.Services.AddCors();
-builder.Services.AddHttpContextAccessor();
+
+// Add services to the container.
+builder.Services.AddRazorComponents()
+    .AddInteractiveServerComponents();
 
 var app = builder.Build();
-app.UseSerilogRequestLogging(); // here
-app.UseCors(o => o.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
-app.UseWebSockets();
 
 // Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+if (!app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
+    app.UseExceptionHandler("/Error", createScopeForErrors: true);
 }
+
+
 
 app.MapGet("/ws", async ([FromServices] IHttpContextAccessor contextAccessor) =>
     {
@@ -54,8 +57,18 @@ app.MapGet("/ws", async ([FromServices] IHttpContextAccessor contextAccessor) =>
         {
             await Task.Delay(1000);
         }
+
         return Results.Empty;
     })
     .WithName("WebSockets");
+
+var api = app.MapGroup("api");
+
+app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+app.UseAntiforgery();
+
+app.MapStaticAssets();
+app.MapRazorComponents<App>()
+    .AddInteractiveServerRenderMode();
 
 app.Run();

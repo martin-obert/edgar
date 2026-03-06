@@ -1,4 +1,4 @@
-﻿namespace Edgar.WebApi;
+﻿namespace Edgar.Service;
 
 public class WebSocketSettings
 {
