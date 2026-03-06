@@ -173,3 +173,17 @@ export const deserializeMessage = (data: Uint8Array): TerminalRequestJson => {
 export const getFunctionFromBody = (body: string) => {
     return JSON.parse(body) as OllamaFunctionCall
 }
+
+export class OllamaModelOptions {
+    seed?: number
+    temperature?: number = 0.7
+    top_p?: number = 0.8
+    top_k?: number = 20
+    // repeat_penalty?: number
+    // repeat_last_n?: number
+    num_ctx?: number = 32768
+    // num_batch?: number
+    // num_gqa?: number
+    num_predict?: number = 8192
+    // num_predict_batch?: number
+}

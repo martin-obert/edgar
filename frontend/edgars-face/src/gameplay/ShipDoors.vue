@@ -3,35 +3,39 @@ import {ref} from "vue";
 import {getFunctionFromBody} from "../websocket-messaging.ts";
 import type {ToolCallEvent} from "../message-manager.ts";
 import {useEventListener} from "@vueuse/core";
+import type {DoorStatus} from "./door.tools.ts";
+
 
 interface ShipDoor {
-  name: string,
-  open: boolean,
+  id: string,
+  state: DoorStatus,
 }
 
 const doors = ref<ShipDoor[]>([
-  {name: 'left', open: false},
-  {name: 'right', open: false},
-  {name: 'front', open: false},
-  {name: 'back', open: false},
+  {id: 'left', state: 'closed'},
+  {id: 'right', state: 'open'},
+  {id: 'front', state: 'jammed'},
+  {id: 'back', state: 'locked'},
 ])
 
 function toolCallHandler({detail}: CustomEvent<ToolCallEvent>) {
   const func = getFunctionFromBody(detail.message.body!)
-  console.log(func.name)
-  if (func.name === 'list_doors') {
-    detail.messageManager.sendToolResponse(JSON.stringify(doors.value), detail.message.toolCallId!, detail.message.promptId!)
-    return
-  }
-  if (func.name === 'open_door' || func.name === 'close_door') {
-    const doorName = func.arguments.door_name
-    const door = doors.value.find(door => door.name === doorName)
-    if (!door) {
-      detail.messageManager.sendToolResponse(`Error ${doorName} not found`, detail.message.toolCallId!, detail.message.promptId!)
-      return
-    }
-    door.open = func.name === 'open_door'
-    detail.messageManager.sendToolResponse(JSON.stringify(door), detail.message.toolCallId!, detail.message.promptId!)
+  switch (func.name) {
+    case 'set_door_state':
+      console.log(func.name)
+      const id = func.arguments.id
+      const door = doors.value.find(door => door.id === id)
+      if (!door) {
+        detail.messageManager.sendToolResponse(`Error ${id} not found`, detail.message.toolCallId!, detail.message.promptId!)
+        return
+      }
+      door.state = func.arguments.state
+      detail.messageManager.sendToolResponse(JSON.stringify(door), detail.message.toolCallId!, detail.message.promptId!)
+      break
+    case 'list_doors':
+      console.log(func.name)
+      detail.messageManager.sendToolResponse(JSON.stringify(doors.value), detail.message.toolCallId!, detail.message.promptId!)
+      break
   }
 }
 
@@ -40,14 +44,16 @@ useEventListener(window, 'toolCall', toolCallHandler)
 </script>
 
 <template>
-  <div class="grid grid-cols-2 gap-2">
-    <div v-for="door in doors" class="flex flex-row justify-items-start gap-2">
-      <span :style="{color: door.open ? 'green' : 'red'}">
-        <span>{{ door.name }} </span><i class="pi" :class="!door.open ? 'pi-lock' : 'pi-lock-open'"></i>
+  <Panel header="Doors">
+    <div class="grid grid-cols-2 gap-2">
+      <div v-for="door in doors" class="flex flex-row justify-items-start gap-2">
+      <span :style="{color: door.state ? 'green' : 'red'}">
+        <span>{{ door.id }} </span><i class="pi" :class="!door.state ? 'pi-lock' : 'pi-lock-open'"></i>
       </span>
 
+      </div>
     </div>
-  </div>
+  </Panel>
 </template>
 
 <style scoped>

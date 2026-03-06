@@ -33,19 +33,6 @@ class ChatMessage(BaseModel):
     tool_name: str | None = None
 
 
-_default_tools: list[OllamaToolWrapper] = [
-    OllamaToolWrapper(type="function", function=SystemTool(name="search",
-                                                           description="Search the web",
-                                                           parameters=SystemToolParameters(
-                                                               type="object",
-                                                               properties={
-                                                                   "query": {"type": "string",
-                                                                             "description": "The search query"},
-                                                               },
-                                                               required=["query"]))
-                      )
-]
-
 class OllamaModelOptions(BaseModel):
     seed: int | None = None
     temperature: float = 0.7
@@ -59,7 +46,7 @@ class OllamaModelOptions(BaseModel):
 class SessionConfig(BaseModel):
     model: str
     system_prompt: str | None = None
-    all_tools: list[OllamaToolWrapper] = _default_tools
+    all_tools: list[OllamaToolWrapper] | None
     options: OllamaModelOptions | None = None
 
 

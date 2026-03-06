@@ -2,12 +2,14 @@ import logging
 import sys
 from pathlib import Path
 
+from httpx import HTTPError
+
 sys.path.insert(0, str(Path(__file__).parent / "generated"))
 
 from uuid import UUID
 from os import getenv
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from starlette.middleware.cors import CORSMiddleware
 from starlette.websockets import WebSocket
 
@@ -44,6 +46,7 @@ async def websocket_endpoint(websocket: WebSocket):
     session_id = UUID(websocket.query_params.get("session_id"))
     logger.info(f"Websocket connected with session_id: {session_id}")
     session_manager = active_sessions.get(session_id, SessionManager(session_id=session_id))
+    logger.info(f"Session manager: {session_manager.configuration}")
     try:
         active_sessions[session_id] = session_manager
         await websocket.accept()
@@ -64,17 +67,19 @@ async def websocket_endpoint(websocket: WebSocket):
 
         if getenv("PERSISTENT_SESSIONS") == "true":
             session_manager.save_chat()
-            active_sessions.pop(session_id)
 
 
 @app.put("/api/v1/sessions/{session_id}/configuration")
 async def update_session_configuration(session_id: UUID, configuration: SessionConfig):
-    return (active_sessions.get(session_id, SessionManager(session_id=session_id))
-            .update_configuration(configuration)
-            .save_config()
-            .configuration)
+    if session_id not in active_sessions:
+        active_sessions[session_id] = SessionManager(session_id=session_id)
+    session_manager = active_sessions[session_id]
+    session_manager.update_configuration(configuration)
+    return session_manager.configuration
 
 
-@app.get("/api/v1/sessions/{session_id}/configuration")
-async def get_session_configuration(session_id: UUID):
-    return active_sessions.get(session_id, SessionManager(session_id=session_id)).configuration
+@app.delete("/api/v1/sessions/{session_id}")
+async def update_session_configuration(session_id: UUID):
+    if session_id in active_sessions:
+        active_sessions.pop(session_id)
+    return {"status": "ok"}

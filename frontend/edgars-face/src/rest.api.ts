@@ -1,7 +1,10 @@
+import type {OllamaModelOptions} from "./websocket-messaging.ts";
+
 export interface SessionConfiguration {
     model: string
     system_prompt: string
     all_tools: OllamaToolDefinition[]
+    options: OllamaModelOptions
 }
 
 export interface OllamaFunctionParameters {
@@ -22,24 +25,14 @@ export interface OllamaToolDefinition {
 }
 
 export interface IRestApi {
+    deleteSession(sessionId: string): Promise<void>
 
     updateSessionConfiguration(sessionId: string, configuration: SessionConfiguration): Promise<SessionConfiguration>
-
-    getSessionConfiguration(sessionId: string): Promise<SessionConfiguration>
 }
 
 class RestApi implements IRestApi {
 
     constructor(private readonly _baseUrl: string) {
-
-    }
-
-    async getSessionConfiguration(sessionId: string): Promise<SessionConfiguration> {
-        const response = await fetch(`${this._baseUrl}/api/v1/sessions/${sessionId}/configuration`, {
-            method: 'GET',
-        })
-
-        return response.json()
     }
 
     async updateSessionConfiguration(sessionId: string, configuration: SessionConfiguration): Promise<SessionConfiguration> {
@@ -50,7 +43,19 @@ class RestApi implements IRestApi {
             },
             body: JSON.stringify(configuration)
         })
+        if (!response.ok) throw new Error(
+            `Failed to update session configuration: ${response.status} ${response.statusText}`
+        )
+        return response.json()
+    }
 
+    async deleteSession(sessionId: string): Promise<void> {
+        const response = await fetch(`${this._baseUrl}/api/v1/sessions/${sessionId}`, {
+            method: 'DELETE',
+        })
+        if (!response.ok) throw new Error(
+            `Failed to delete session: ${response.status} ${response.statusText}`
+        )
         return response.json()
     }
 
