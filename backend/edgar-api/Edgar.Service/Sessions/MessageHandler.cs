@@ -1,72 +1,7 @@
-﻿using System.Net.WebSockets;
-using System.Text;
-using System.Text.Json;
+﻿using System.Text;
 using Edgar.Service.Ollama;
 
 namespace Edgar.Service.Sessions;
-
-public static class KnownHeaders
-{
-    public const string PromptId = "prompt-id";
-    public const string ToolCallId = "tool-call-id";
-    public const string ChunkId = "chunk-id";
-    public const string ContentType = "content-type";
-    public const string Role = "role";
-    public const string Signal = "signal";
-}
-
-public static class KnownRoles
-{
-    public const string Assistant = "assistant";
-    public const string User = "user";
-    public const string System = "system";
-    public const string Tool = "tool";
-}
-
-public static class KnownContentTypes
-{
-    public const string Text = "text/plain";
-    public const string Json = "application/json";
-    public const string JsonToolCall = "application/json+tool-call";
-    public const string Empty = "empty";
-}
-
-public static class SignalTypes
-{
-    public const string RequestComplete = "request_complete";
-    public const string ToolCallWaiting = "tool_call_waiting";
-}
-
-public class MessageHeaders
-{
-    public required string Name { get; set; }
-    public required string Value { get; set; }
-}
-
-public class MessageEnvelope
-{
-    public MessageHeaders[] Headers { get; set; } = [];
-    public string? Body { get; set; }
-
-    public string Role => Headers.FirstOrDefault(h => h.Name == KnownHeaders.Role)?.Value ??
-                          throw new Exception("Role not found");
-
-    public string? ToolCallId => Headers.FirstOrDefault(h => h.Name == KnownHeaders.ToolCallId)?.Value;
-    public string? PromptId => Headers.FirstOrDefault(h => h.Name == KnownHeaders.PromptId)?.Value;
-}
-
-public interface IMessageStreamWriter
-{
-    Task WriteAsync(MessageEnvelope message);
-}
-
-public class WebSocketMessageStreamWriter(WebSocket webSocket) : IMessageStreamWriter
-{
-    public Task WriteAsync(MessageEnvelope message)
-    {
-        throw new NotImplementedException();
-    }
-}
 
 public class MessageHandler(
     IMessageStreamWriter messageStreamWriter,
@@ -77,7 +12,7 @@ public class MessageHandler(
 {
     private class PromptProgress
     {
-        public List<OllamaToolCallRequest> ToolCalls = new();
+        public List<OllamaToolCallRequest> ToolCalls { get; } = new();
         public StringBuilder Content = new();
         public StringBuilder Thinking = new();
         public bool ChunksComplete = false;
@@ -102,6 +37,7 @@ public class MessageHandler(
             };
         }
     }
+
 
     private PromptProgress? _promptProgress;
 
@@ -202,6 +138,8 @@ public class MessageHandler(
             return;
         }
 
+        var chunkId = 0;
+
         await llmService.GenerateResponseAsync(messages, OnChunkReceived, modelConfiguration,
             CancellationToken.None);
 
@@ -227,6 +165,7 @@ public class MessageHandler(
 
         void OnChunkReceived(OllamaResponseChunk obj)
         {
+            chunkId++;
             if (obj.Done)
                 localProgress.ChunksComplete = true;
 
@@ -239,13 +178,14 @@ public class MessageHandler(
                         Id = ollamaToolCall.Id,
                         Type = ollamaToolCall.Type,
                     });
-                    messageStreamWriter.WriteAsync();
+                    messageStreamWriter.WriteAsync(MessageFactory.ToolCall(ollamaToolCall, localProgress.PromptId));
                 }
 
             if (!string.IsNullOrWhiteSpace(obj.Message.Thinking))
             {
                 localProgress.Thinking.Append(obj.Message.Thinking);
-                messageStreamWriter.WriteAsync();
+                messageStreamWriter.WriteAsync(MessageFactory.ThinkingChunk(obj.Message.Thinking,
+                    localProgress.PromptId));
             }
 
             if (!string.IsNullOrWhiteSpace(obj.Message.Content))
@@ -254,7 +194,8 @@ public class MessageHandler(
                     throw new Exception($"Unexpected role: {obj.Message.Role}");
 
                 localProgress.Content.Append(obj.Message.Content);
-                messageStreamWriter.WriteAsync();
+                messageStreamWriter.WriteAsync(MessageFactory.ChunkResponse(obj.Message.Content, localProgress.PromptId,
+                    chunkId.ToString()));
             }
         }
     }
@@ -287,78 +228,5 @@ public class MessageHandler(
         }
 
         return _promptProgress;
-    }
-}
-
-public interface ILlmService
-{
-    Task GenerateResponseAsync(IEnumerable<OllamaChatMessage> chatMessages,
-        Action<OllamaResponseChunk> onChunkReceived,
-        OllamaModelDefinition modelConfiguration,
-        CancellationToken cancellationToken);
-}
-
-public class LlmService : ILlmService
-{
-    private readonly string _baseUrl = "https://ollama.obert.cz";
-
-    public async Task GenerateResponseAsync(IEnumerable<OllamaChatMessage> chatMessages,
-        Action<OllamaResponseChunk> onChunkReceived,
-        OllamaModelDefinition modelConfiguration,
-        CancellationToken cancellationToken)
-    {
-        using var httpClient = new HttpClient();
-        httpClient.BaseAddress = new Uri(_baseUrl);
-        var jsonOptions = new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-            WriteIndented = true
-        };
-
-        var json = JsonSerializer.Serialize(new OllamaChatRequest
-        {
-            Messages = chatMessages.Prepend(new OllamaChatMessage
-            {
-                Role = KnownRoles.System,
-                Content = modelConfiguration.SystemPrompt
-            }),
-            Model = modelConfiguration.Model,
-            Options = modelConfiguration.Options,
-            Stream = true,
-            Tools = modelConfiguration.AllTools
-        }, jsonOptions);
-        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "/api/chat");
-        httpRequest.Content = new StringContent(json, Encoding.UTF8, "application/json");
-
-        // Critical: ResponseHeadersRead starts streaming immediately
-        // instead of buffering the entire response
-        using var response = await httpClient.SendAsync(
-            httpRequest,
-            HttpCompletionOption.ResponseHeadersRead,
-            cancellationToken);
-
-        response.EnsureSuccessStatusCode();
-
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        using var reader = new StreamReader(stream);
-
-        var line = await reader.ReadLineAsync(cancellationToken);
-        while (!string.IsNullOrWhiteSpace(line))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var chunk = JsonSerializer.Deserialize<OllamaResponseChunk>(line, jsonOptions);
-            if (chunk is null)
-                throw new Exception("Chunk is null");
-
-            onChunkReceived?.Invoke(chunk);
-
-            line = await reader.ReadLineAsync(cancellationToken);
-
-            if (line is not null) continue;
-
-            if (!chunk.Done)
-                throw new Exception("Chunk is not done, but no more lines");
-        }
     }
 }

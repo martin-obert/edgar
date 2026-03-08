@@ -28,7 +28,8 @@ builder.Services.AddWebSockets(c =>
     foreach (var origin in wsSettings.AllowedOrigins)
         c.AllowedOrigins.Add(origin);
 });
-
+builder.Services.AddScoped<IChatRepository, ChatRepository>();
+builder.Services.AddScoped<ILlmService, LlmService>();
 builder.Services.AddScoped<ISessionService, SessionService>();
 builder.Services.AddScoped<ISessionRepository, InMemorySessionRepository>();
 // Add services to the container.
@@ -67,8 +68,8 @@ app.MapGet("/ws", async (
         }
 
         using var scope = serviceProvider.CreateScope();
-        var logger = serviceProvider.GetRequiredService<ILogger<SessionManager>>();
-        using var manager = new SessionManager(session, logger);
+        
+        using var manager = new SessionManager(session, scope.ServiceProvider);
 
         await manager.LoopAsync(ws, cancellationToken);
 
