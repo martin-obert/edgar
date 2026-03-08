@@ -9,9 +9,8 @@ public static class MessageFormatter
     
     private static JsonSerializerOptions JsonSerializerOptions { get; } = new()
     {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = false,
-        DefaultIgnoreCondition = JsonIgnoreCondition.Always,
         Converters = { new JsonStringEnumConverter() },
     };
 
@@ -20,5 +19,10 @@ public static class MessageFormatter
     {
         var json = Serialize(obj);
         return Encoding.UTF8.GetBytes(json);
+    }
+
+    public static MessageEnvelope? Deserialize(string json)
+    {
+        return JsonSerializer.Deserialize<MessageEnvelope>(json, JsonSerializerOptions);
     }
 }

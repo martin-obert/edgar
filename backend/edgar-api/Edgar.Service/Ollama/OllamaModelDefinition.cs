@@ -64,7 +64,7 @@ public class OllamaToolCallRequest : OllamaToolCall
 public class OllamaToolCall
 {
     public required string Id { get; set; }
-    public required string Type { get; set; }
+    // public required string Type { get; set; }
     public required OllamaToolCallFunction Function { get; set; }
 }
 
@@ -85,8 +85,7 @@ public class OllamaResponseChunk
 
     public required bool Done { get; set; }
     public string? DoneReason { get; set; }
-    public int TotalDuration { get; set; }
-    public OllamaToolCall[]? ToolCalls { get; set; }
+    public long? TotalDuration { get; set; }
 }
 
 public class OllamaChatRequest

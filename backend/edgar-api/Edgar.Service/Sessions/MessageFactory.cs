@@ -17,7 +17,7 @@ public static class MessageFactory
         };
     }
 
-    public static MessageEnvelope ToolCall(OllamaToolCall toolCall, string promptId)
+    public static MessageEnvelope ToolCall(OllamaToolCallFunction toolCall, string promptId, string toolCallId)
     {
         return new MessageEnvelope
         {
@@ -25,7 +25,7 @@ public static class MessageFactory
             Headers =
             [
                 new MessageHeader { Name = KnownHeaders.PromptId, Value = promptId },
-                new MessageHeader { Name = KnownHeaders.ToolCallId, Value = toolCall.Id },
+                new MessageHeader { Name = KnownHeaders.ToolCallId, Value = toolCallId },
                 new MessageHeader { Name = KnownHeaders.Role, Value = KnownRoles.Tool }
             ]
         };

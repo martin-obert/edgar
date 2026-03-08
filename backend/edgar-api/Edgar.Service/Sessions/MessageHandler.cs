@@ -21,9 +21,7 @@ public class MessageHandler(
                                   (SubPrompt is null || SubPrompt.IsComplete);
 
         public required string PromptId { get; init; }
-        public string? ParentPromptId { get; set; }
 
-        public bool IsSubPrompt => ParentPromptId is not null;
         public PromptProgress? SubPrompt { get; set; }
 
         public OllamaChatMessage ToChatMessage()
@@ -51,16 +49,24 @@ public class MessageHandler(
     {
         Task.Run(async () =>
         {
-            switch (receivedMessage.Role)
+            try
             {
-                case KnownRoles.User:
-                    await HandleUserPrompt(receivedMessage, cancellationToken);
-                    break;
-                case KnownRoles.Tool:
-                    await HandleToolRoleMessage(receivedMessage, cancellationToken);
-                    break;
-                default:
-                    throw new Exception($"Unexpected role: {receivedMessage.Role}");
+                logger.LogInformation("Handling message for role: {Role}", receivedMessage.Role);
+                switch (receivedMessage.Role)
+                {
+                    case KnownRoles.User:
+                        await HandleUserPrompt(receivedMessage, cancellationToken);
+                        break;
+                    case KnownRoles.Tool:
+                        await HandleToolRoleMessage(receivedMessage, cancellationToken);
+                        break;
+                    default:
+                        throw new Exception($"Unexpected role: {receivedMessage.Role}");
+                }
+            }
+            catch (Exception e)
+            {
+                logger.LogError(e, "Error handling message for role: {Role}", receivedMessage.Role);
             }
         }, cancellationToken).ConfigureAwait(false);
     }
@@ -141,7 +147,7 @@ public class MessageHandler(
         var chunkId = 0;
 
         await llmService.GenerateResponseAsync(messages, OnChunkReceived, modelConfiguration,
-            CancellationToken.None);
+            cancellationToken);
 
         var delayBudget = TimeSpan.FromSeconds(10);
 
@@ -154,11 +160,15 @@ public class MessageHandler(
         if (localProgress.ToolCalls.Any())
         {
             await llmService.GenerateResponseAsync(messages, OnChunkReceived, modelConfiguration,
-                CancellationToken.None);
+                cancellationToken);
         }
 
-        if (localProgress.IsComplete) messages.Add(localProgress.ToChatMessage());
+        if (localProgress.IsComplete)
+        {
+            messages.Add(localProgress.ToChatMessage());
+        }
 
+        messageStreamWriter.WriteAsync(MessageFactory.SignalPromptComplete(localProgress.PromptId), cancellationToken);
         _promptProgress = null;
 
         return;
@@ -169,23 +179,23 @@ public class MessageHandler(
             if (obj.Done)
                 localProgress.ChunksComplete = true;
 
-            if (obj.ToolCalls is not null)
-                foreach (var ollamaToolCall in obj.ToolCalls)
+            if (obj.Message.ToolCalls is not null)
+                foreach (var ollamaToolCall in obj.Message.ToolCalls)
                 {
                     localProgress.ToolCalls.Add(new OllamaToolCallRequest
                     {
                         Function = ollamaToolCall.Function,
                         Id = ollamaToolCall.Id,
-                        Type = ollamaToolCall.Type,
+                        // Type = ollamaToolCall.Type,
                     });
-                    messageStreamWriter.WriteAsync(MessageFactory.ToolCall(ollamaToolCall, localProgress.PromptId));
+                   messageStreamWriter.WriteAsync(MessageFactory.ToolCall(ollamaToolCall.Function, localProgress.PromptId, ollamaToolCall.Id), cancellationToken);
                 }
 
             if (!string.IsNullOrWhiteSpace(obj.Message.Thinking))
             {
                 localProgress.Thinking.Append(obj.Message.Thinking);
                 messageStreamWriter.WriteAsync(MessageFactory.ThinkingChunk(obj.Message.Thinking,
-                    localProgress.PromptId));
+                    localProgress.PromptId), cancellationToken);
             }
 
             if (!string.IsNullOrWhiteSpace(obj.Message.Content))
@@ -195,7 +205,7 @@ public class MessageHandler(
 
                 localProgress.Content.Append(obj.Message.Content);
                 messageStreamWriter.WriteAsync(MessageFactory.ChunkResponse(obj.Message.Content, localProgress.PromptId,
-                    chunkId.ToString()));
+                    chunkId.ToString()), cancellationToken);
             }
         }
     }
@@ -210,6 +220,7 @@ public class MessageHandler(
                 {
                     PromptId = receivedMessage.PromptId ?? Guid.NewGuid().ToString(),
                 };
+                return _promptProgress;
             }
 
             logger.LogWarning("Tool call received, but no prompt is active");
@@ -220,8 +231,7 @@ public class MessageHandler(
         {
             var subPrompt = new PromptProgress
             {
-                PromptId = Guid.NewGuid().ToString(),
-                ParentPromptId = _promptProgress.PromptId,
+                PromptId = _promptProgress.PromptId,
             };
             _promptProgress.SubPrompt = subPrompt;
             return subPrompt;

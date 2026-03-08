@@ -32,48 +32,75 @@ builder.Services.AddScoped<IChatRepository, ChatRepository>();
 builder.Services.AddScoped<ILlmService, LlmService>();
 builder.Services.AddScoped<ISessionService, SessionService>();
 builder.Services.AddScoped<ISessionRepository, InMemorySessionRepository>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddCors();
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 var app = builder.Build();
-
+app.UseCors(o => o.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
+app.UseWebSockets();
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
 }
 
+app.UseSerilogRequestLogging(opts =>
+{
+    opts.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>
+    {
+        diagnosticContext.Set("RequestHost", httpContext.Request.Host.Value);
+        diagnosticContext.Set("UserAgent", httpContext.Request.Headers.UserAgent.ToString());
+    };
+
+    // logs will include method, path, status code, and elapsed ms by default
+    opts.MessageTemplate =
+        "HTTP {RequestMethod} {RequestPath} responded {StatusCode} in {Elapsed:0.0}ms";
+});
 
 app.MapGet("/ws", async (
-        [FromQuery(Name = "sessionId")] Guid sessionId,
+        [FromQuery(Name = "session_id")] Guid sessionId,
         [FromServices] IHttpContextAccessor contextAccessor,
         [FromServices] IServiceProvider serviceProvider,
         [FromServices] ISessionService sessionService,
+        [FromServices] ILogger<Program> logger,
         CancellationToken cancellationToken = default
     ) =>
     {
-        if (contextAccessor.HttpContext == null)
-            throw new Exception("Context is null");
-
-        if (!contextAccessor.HttpContext.WebSockets.IsWebSocketRequest)
-            return Results.BadRequest();
-
-        var ws = await contextAccessor.HttpContext.WebSockets.AcceptWebSocketAsync();
-
-        var session = await sessionService.GetSessionByIdAsync(sessionId, cancellationToken);
-        if (session == null)
+        logger.LogInformation("WebSockets connection requested");
+        try
         {
-            return Results.NotFound();
+            if (contextAccessor.HttpContext == null)
+                throw new Exception("Context is null");
+
+            if (!contextAccessor.HttpContext.WebSockets.IsWebSocketRequest)
+                return Results.BadRequest();
+
+            var ws = await contextAccessor.HttpContext.WebSockets.AcceptWebSocketAsync();
+
+            logger.LogInformation("WebSockets connection accepted");
+
+            // TODO: switch to begin/end session
+            var session = await sessionService.GetSessionByIdAsync(sessionId, cancellationToken) ??
+                          await sessionService.CreateSessionAsync(cancellationToken);
+
+            logger.LogInformation("Starting session {SessionId}", session.Id);
+            
+            using var scope = serviceProvider.CreateScope();
+
+            using var manager = new SessionManager(session, scope.ServiceProvider);
+
+            await manager.LoopAsync(ws, cancellationToken);
+
+            return Results.Empty;
         }
-
-        using var scope = serviceProvider.CreateScope();
-        
-        using var manager = new SessionManager(session, scope.ServiceProvider);
-
-        await manager.LoopAsync(ws, cancellationToken);
-
-        return Results.Empty;
+        catch (Exception e)
+        {
+            Log.Error(e, "Error in WebSockets");
+            return Results.BadRequest();
+        }
     })
     .WithName("WebSockets");
 

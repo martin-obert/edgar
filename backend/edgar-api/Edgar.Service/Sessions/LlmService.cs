@@ -4,7 +4,7 @@ using Edgar.Service.Ollama;
 
 namespace Edgar.Service.Sessions;
 
-public class LlmService : ILlmService
+public class LlmService(ILogger<LlmService> logger) : ILlmService
 {
     private readonly string _baseUrl = "https://ollama.obert.cz";
 
@@ -35,7 +35,8 @@ public class LlmService : ILlmService
         }, jsonOptions);
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "/api/chat");
         httpRequest.Content = new StringContent(json, Encoding.UTF8, "application/json");
-
+        httpRequest.Headers.Add("CF-Access-Client-ID", "<your-client-id-here>");
+        httpRequest.Headers.Add("CF-Access-Client-Secret", "<your-client-secret-here>");
         // Critical: ResponseHeadersRead starts streaming immediately
         // instead of buffering the entire response
         using var response = await httpClient.SendAsync(
@@ -51,20 +52,31 @@ public class LlmService : ILlmService
         var line = await reader.ReadLineAsync(cancellationToken);
         while (!string.IsNullOrWhiteSpace(line))
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                
+                logger.LogInformation("Processing chunk: {Chunk}", line);
+                
+                var chunk = JsonSerializer.Deserialize<OllamaResponseChunk>(line, jsonOptions);
+                
+                if (chunk is null)
+                    throw new Exception("Chunk is null");
 
-            var chunk = JsonSerializer.Deserialize<OllamaResponseChunk>(line, jsonOptions);
-            if (chunk is null)
-                throw new Exception("Chunk is null");
+                onChunkReceived?.Invoke(chunk);
 
-            onChunkReceived?.Invoke(chunk);
+                line = await reader.ReadLineAsync(cancellationToken);
 
-            line = await reader.ReadLineAsync(cancellationToken);
+                if (line is not null) continue;
 
-            if (line is not null) continue;
-
-            if (!chunk.Done)
-                throw new Exception("Chunk is not done, but no more lines");
+                if (!chunk.Done)
+                    throw new Exception("Chunk is not done, but no more lines");
+            }
+            catch (System.Text.Json.JsonException e)
+            {
+                logger.LogError(e, "Error processing chunk: {Chunk}", line);
+                throw;
+            }
         }
     }
 }
