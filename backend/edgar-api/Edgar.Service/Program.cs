@@ -1,6 +1,7 @@
 using System.Net.WebSockets;
 using Edgar.Service;
 using Edgar.Service.Components;
+using Edgar.Service.Sessions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebSockets;
 using Serilog;
@@ -28,7 +29,8 @@ builder.Services.AddWebSockets(c =>
         c.AllowedOrigins.Add(origin);
 });
 
-
+builder.Services.AddScoped<ISessionService, SessionService>();
+builder.Services.AddScoped<ISessionRepository, InMemorySessionRepository>();
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
@@ -42,8 +44,13 @@ if (!app.Environment.IsDevelopment())
 }
 
 
-
-app.MapGet("/ws", async ([FromServices] IHttpContextAccessor contextAccessor) =>
+app.MapGet("/ws", async (
+        [FromQuery(Name = "sessionId")] Guid sessionId,
+        [FromServices] IHttpContextAccessor contextAccessor,
+        [FromServices] IServiceProvider serviceProvider,
+        [FromServices] ISessionService sessionService,
+        CancellationToken cancellationToken = default
+    ) =>
     {
         if (contextAccessor.HttpContext == null)
             throw new Exception("Context is null");
@@ -53,16 +60,53 @@ app.MapGet("/ws", async ([FromServices] IHttpContextAccessor contextAccessor) =>
 
         var ws = await contextAccessor.HttpContext.WebSockets.AcceptWebSocketAsync();
 
-        while (ws.State == WebSocketState.Open)
+        var session = await sessionService.GetSessionByIdAsync(sessionId, cancellationToken);
+        if (session == null)
         {
-            await Task.Delay(1000);
+            return Results.NotFound();
         }
+
+        using var scope = serviceProvider.CreateScope();
+        var logger = serviceProvider.GetRequiredService<ILogger<SessionManager>>();
+        using var manager = new SessionManager(session, logger);
+
+        await manager.LoopAsync(ws, cancellationToken);
 
         return Results.Empty;
     })
     .WithName("WebSockets");
 
 var api = app.MapGroup("api");
+var sessionsGroup = api.MapGroup("sessions");
+sessionsGroup.MapPost("begin",
+    async ([FromServices] ISessionService sessionService, CancellationToken cancellationToken = default) =>
+    {
+        var session = await sessionService.CreateSessionAsync(cancellationToken);
+        return Results.Created($"/api/sessions/{session.Id}", session);
+    });
+
+sessionsGroup.MapDelete("{sessionId:guid}/end",
+    async ([FromRoute(Name = "sessionId")] Guid sessionId, [FromServices] ISessionService sessionService,
+        CancellationToken token = default) =>
+    {
+        await sessionService.DeleteSessionAsync(sessionId, token);
+        return Results.NoContent();
+    });
+
+sessionsGroup.MapGet("{sessionId:guid}",
+        async ([FromServices] ISessionService sessionService,
+            [FromRoute(Name = "sessionId")] Guid sessionId,
+            CancellationToken token = default) =>
+        {
+            var session = await sessionService.GetSessionByIdAsync(sessionId, token);
+            if (session == null)
+                return Results.NotFound();
+
+
+            return Results.Ok(session);
+        })
+    .WithName("GetSessionById");
+
 
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseAntiforgery();
