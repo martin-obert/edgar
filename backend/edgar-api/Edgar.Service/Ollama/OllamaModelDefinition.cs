@@ -5,7 +5,7 @@ namespace Edgar.Service.Ollama;
 public class OllamaFunctionParameterDefinition
 {
     public required string Type { get; set; }
-    public required string Definition { get; set; }
+    public required string Description { get; set; }
     public string[]? Enum { get; set; }
 }
 
@@ -19,7 +19,7 @@ public class OllamaFunctionParametersDefinition
 public class OllamaFunctionDefinition
 {
     public required string Name { get; set; }
-    public required string Definition { get; set; }
+    public required string Description { get; set; }
     public OllamaFunctionParametersDefinition? Parameters { get; set; }
 }
 
@@ -75,6 +75,7 @@ public class OllamaChatMessage
     public string? Thinking { get; set; }
     public OllamaToolCall[]? ToolCalls { get; set; }
     public string? ToolName { get; set; }
+    public DateTime? CreatedAt { get; set; }
 }
 
 public class OllamaResponseChunk

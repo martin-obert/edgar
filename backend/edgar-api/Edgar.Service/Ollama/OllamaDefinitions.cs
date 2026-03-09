@@ -24,7 +24,7 @@ public static class OllamaDefinitions
                 Function = new OllamaFunctionDefinition
                 {
                     Name = "list_doors",
-                    Definition = "List all the doors in the room.",
+                    Description = "List all the doors in the room.",
                     Parameters = null
                 }
             },
@@ -33,7 +33,7 @@ public static class OllamaDefinitions
                 Function = new OllamaFunctionDefinition
                 {
                     Name = "set_door_state",
-                    Definition = "Set the state of the door.",
+                    Description = "Set the state of the door.",
                     Parameters = new OllamaFunctionParametersDefinition
                     {
                         Type = "object",
@@ -42,7 +42,7 @@ public static class OllamaDefinitions
                             {
                                 "id",
                                 new OllamaFunctionParameterDefinition
-                                    { Type = "string", Definition = "The id of the door." }
+                                    { Type = "string", Description = "The id of the door." }
                             },
                             {
                                 "state",
@@ -50,7 +50,7 @@ public static class OllamaDefinitions
                                 {
                                     Type = "string",
                                     Enum = ["open", "closed", "jammed", "locked"],
-                                    Definition = "The state of the door. Can be open, closed, jammed or locked."
+                                    Description = "The state of the door. Can be open, closed, jammed or locked."
                                 }
                             }
                         },

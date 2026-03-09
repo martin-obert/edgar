@@ -1,0 +1,32 @@
+﻿@page "/sessions"
+@using Edgar.Service.Sessions
+@inject ISessionRepository SessionRepository
+<h3>Sessions</h3>
+<table>
+    @foreach (var session in _sessions)
+    {
+        <tr>
+            <td>
+                @session.Id
+            </td>
+            <td>
+                @session.State
+            </td>
+            <td>
+                @session.CreatedAt
+            </td>
+        </tr>
+    }
+</table>
+
+
+
+@code {
+    private IEnumerable<Session> _sessions = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _sessions = await SessionRepository.ListSessionsAsync();
+    }
+
+}

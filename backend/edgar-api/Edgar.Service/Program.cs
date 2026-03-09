@@ -1,13 +1,18 @@
 using System.Net.WebSockets;
+using System.Text.Json;
 using Edgar.Service;
 using Edgar.Service.Components;
+using Edgar.Service.Ollama;
 using Edgar.Service.Sessions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebSockets;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
-
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower;
+});
 
 builder.Host.UseSerilog((ctx, cfg) =>
     cfg
@@ -46,7 +51,6 @@ if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
 }
-
 app.UseSerilogRequestLogging(opts =>
 {
     opts.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>
@@ -85,32 +89,36 @@ app.MapGet("/ws", async (
             // TODO: switch to begin/end session
             var session = await sessionService.GetSessionByIdAsync(sessionId, cancellationToken) ??
                           await sessionService.CreateSessionAsync(cancellationToken);
+            await sessionService.SetSessionStateAsync(sessionId, SessionState.Connected, cancellationToken);
 
             logger.LogInformation("Starting session {SessionId}", session.Id);
-            
+
             using var scope = serviceProvider.CreateScope();
 
             using var manager = new SessionManager(session, scope.ServiceProvider);
 
             await manager.LoopAsync(ws, cancellationToken);
-
-            return Results.Empty;
         }
         catch (Exception e)
         {
             Log.Error(e, "Error in WebSockets");
-            return Results.BadRequest();
         }
+        finally
+        {
+            await sessionService.SetSessionStateAsync(sessionId, SessionState.Disconnected, CancellationToken.None);
+        }
+
+        return Results.Empty;
     })
     .WithName("WebSockets");
 
-var api = app.MapGroup("api");
+var api = app.MapGroup("api/v1");
 var sessionsGroup = api.MapGroup("sessions");
 sessionsGroup.MapPost("begin",
     async ([FromServices] ISessionService sessionService, CancellationToken cancellationToken = default) =>
     {
         var session = await sessionService.CreateSessionAsync(cancellationToken);
-        return Results.Created($"/api/sessions/{session.Id}", session);
+        return Results.Created($"/api/v1/sessions/{session.Id}", session);
     });
 
 sessionsGroup.MapDelete("{sessionId:guid}/end",
@@ -119,6 +127,14 @@ sessionsGroup.MapDelete("{sessionId:guid}/end",
     {
         await sessionService.DeleteSessionAsync(sessionId, token);
         return Results.NoContent();
+    });
+
+sessionsGroup.MapPut("{sessionId:guid}/configuration",
+    async ([FromRoute(Name = "sessionId")] Guid sessionId, [FromBody] OllamaModelDefinition configuration, [FromServices] ISessionService sessionService,
+        CancellationToken token = default) =>
+    {
+        await sessionService.UpdateSessionDefinitionAsync(sessionId, configuration, token);
+        return Results.Ok(configuration);
     });
 
 sessionsGroup.MapGet("{sessionId:guid}",

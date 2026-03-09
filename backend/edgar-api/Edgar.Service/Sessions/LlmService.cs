@@ -8,7 +8,7 @@ public class LlmService(ILogger<LlmService> logger) : ILlmService
 {
     private readonly string _baseUrl = "https://ollama.obert.cz";
 
-    public async Task GenerateResponseAsync(IEnumerable<OllamaChatMessage> chatMessages,
+    public async Task GenerateResponseAsync(ChatMessageBag chatMessages,
         Action<OllamaResponseChunk> onChunkReceived,
         OllamaModelDefinition modelConfiguration,
         CancellationToken cancellationToken)
@@ -26,9 +26,9 @@ public class LlmService(ILogger<LlmService> logger) : ILlmService
             Messages = chatMessages.Prepend(new OllamaChatMessage
             {
                 Role = KnownRoles.System,
-                Content = modelConfiguration.SystemPrompt
-            }),
-            Model = modelConfiguration.Model,
+                Content = modelConfiguration.SystemPrompt,
+                CreatedAt = DateTime.UtcNow,
+            }), Model = modelConfiguration.Model,
             Options = modelConfiguration.Options,
             Stream = true,
             Tools = modelConfiguration.AllTools

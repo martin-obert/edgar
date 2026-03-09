@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using Edgar.Service.Ollama;
+using ILogger = Serilog.ILogger;
 
 namespace Edgar.Service.Sessions;
 
@@ -7,8 +8,8 @@ public class MessageHandler(
     IMessageStreamWriter messageStreamWriter,
     ILlmService llmService,
     OllamaModelDefinition modelConfiguration,
-    List<OllamaChatMessage> messages,
-    ILogger<MessageHandler> logger)
+    ChatMessageBag messages,
+    ILogger logger)
 {
     private class PromptProgress
     {
@@ -32,6 +33,7 @@ public class MessageHandler(
                 ToolCalls = ToolCalls.Cast<OllamaToolCall>().ToArray(),
                 Thinking = Thinking.ToString(),
                 Role = KnownRoles.Assistant,
+                CreatedAt = DateTime.UtcNow,
             };
         }
     }
@@ -51,7 +53,7 @@ public class MessageHandler(
         {
             try
             {
-                logger.LogInformation("Handling message for role: {Role}", receivedMessage.Role);
+                logger.Information("Handling message for role: {Role}", receivedMessage.Role);
                 switch (receivedMessage.Role)
                 {
                     case KnownRoles.User:
@@ -66,7 +68,7 @@ public class MessageHandler(
             }
             catch (Exception e)
             {
-                logger.LogError(e, "Error handling message for role: {Role}", receivedMessage.Role);
+                logger.Error(e, "Error handling message for role: {Role}", receivedMessage.Role);
             }
         }, cancellationToken).ConfigureAwait(false);
     }
@@ -76,19 +78,19 @@ public class MessageHandler(
     {
         if (_promptProgress is null)
         {
-            logger.LogWarning("Tool call received, but no prompt is active");
+            logger.Warning("Tool call received, but no prompt is active");
             return;
         }
 
         if (receivedMessage.PromptId != _promptProgress.PromptId)
         {
-            logger.LogWarning("Tool call received, but prompt id does not match");
+            logger.Warning("Tool call received, but prompt id does not match");
             return;
         }
 
         if (string.IsNullOrWhiteSpace(receivedMessage.ToolCallId))
         {
-            logger.LogWarning("Tool call received, but tool call id is null or empty");
+            logger.Warning("Tool call received, but tool call id is null or empty");
             return;
         }
 
@@ -96,14 +98,14 @@ public class MessageHandler(
 
         if (pendingToolRequest is null)
         {
-            logger.LogWarning("Tool call {ToolCallId} received, but no pending tool call found",
+            logger.Warning("Tool call {ToolCallId} received, but no pending tool call found",
                 receivedMessage.ToolCallId);
             return;
         }
 
         if (pendingToolRequest.IsResolved)
         {
-            logger.LogWarning("Tool call {ToolCallId} received, but it is already resolved",
+            logger.Warning("Tool call {ToolCallId} received, but it is already resolved",
                 receivedMessage.ToolCallId);
         }
 
@@ -114,6 +116,7 @@ public class MessageHandler(
             Role = KnownRoles.Tool,
             Content = receivedMessage.Body,
             ToolName = pendingToolRequest.Function.Name,
+            CreatedAt = DateTime.UtcNow,
         });
         await GenerateAndProcessResponseAsync(receivedMessage, cancellationToken);
     }
@@ -127,6 +130,7 @@ public class MessageHandler(
         {
             Role = KnownRoles.User,
             Content = receivedMessage.Body,
+            CreatedAt = DateTime.UtcNow,
         });
 
         await GenerateAndProcessResponseAsync(receivedMessage, cancellationToken);
@@ -140,7 +144,7 @@ public class MessageHandler(
 
         if (localProgress is null)
         {
-            logger.LogWarning("Prompt progress is null, ignoring message");
+            logger.Warning("Prompt progress is null, ignoring message");
             return;
         }
 
@@ -223,7 +227,7 @@ public class MessageHandler(
                 return _promptProgress;
             }
 
-            logger.LogWarning("Tool call received, but no prompt is active");
+            logger.Warning("Tool call received, but no prompt is active");
             return null;
         }
 

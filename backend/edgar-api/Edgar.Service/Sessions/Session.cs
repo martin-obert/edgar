@@ -6,4 +6,6 @@ public class Session
 {
     public Guid Id { get; set; }
     public OllamaModelDefinition? ModelConfiguration { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public SessionState State { get; set; } = SessionState.Created;
 }
