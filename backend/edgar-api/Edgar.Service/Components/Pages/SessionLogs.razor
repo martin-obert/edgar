@@ -1,0 +1,37 @@
+﻿@page "/sessions/{sessionId}/logs"
+@using Edgar.Service.Sessions
+@inject ISessionLogRepository SessionLogRepository
+
+<h3>SessionLogs</h3>
+
+<table class="table table-striped">
+    <thead>
+    <tr>
+        <th scope="col">Log</th>
+    </tr>
+    </thead>
+    <tbody>
+    @if (!Logs.Any())
+    {
+        <tr><td >No logs</td></tr>   
+    }
+    @foreach (var log in Logs)
+    {
+        <tr>
+            <td>@log</td>
+        </tr>
+    }
+    </tbody>
+</table>
+
+@code {
+    [Parameter] public required string SessionId { get; set; }
+
+    private string[] Logs = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        Logs = await SessionLogRepository.GetTraceLog(Guid.Parse(SessionId));
+    }
+
+}

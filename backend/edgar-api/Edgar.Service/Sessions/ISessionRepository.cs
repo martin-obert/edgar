@@ -40,6 +40,28 @@ public class InMemorySessionRepository : ISessionRepository
 
     public Task<Session[]> ListSessionsAsync()
     {
+        var path = Path.Combine(Directory.GetCurrentDirectory(), "logs", "sessions");
+        if (Path.Exists(path))
+        {
+            var files = Directory.GetDirectories(path);
+            foreach (var file in files)
+            {
+                var sessionId = Guid.Parse(Path.GetFileNameWithoutExtension(file));
+                if (_sessions.ContainsKey(sessionId))
+                {
+                    continue;
+                }
+
+                _sessions[sessionId] = new Session
+                {
+                    CreatedAt = File.GetCreationTime(file),
+                    Id = sessionId,
+                    ModelConfiguration = OllamaDefinitions.DefaultModel,
+                    State = SessionState.Disconnected
+                };
+            }
+        }
+
         return Task.FromResult(_sessions.Values.ToArray());
     }
 

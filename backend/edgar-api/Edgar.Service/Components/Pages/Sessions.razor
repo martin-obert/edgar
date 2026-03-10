@@ -1,8 +1,18 @@
 ﻿@page "/sessions"
+@page "/"
 @using Edgar.Service.Sessions
 @inject ISessionRepository SessionRepository
 <h3>Sessions</h3>
-<table>
+<table class="table table-striped table-sm table-bordered">
+    <thead>
+    <tr>
+        <th>Id</th>
+        <th>State</th>
+        <th>Created At</th>
+        <th>Actions</th>
+    </tr>
+    </thead>
+    <tbody>
     @foreach (var session in _sessions)
     {
         <tr>
@@ -15,8 +25,13 @@
             <td>
                 @session.CreatedAt
             </td>
+            <td>
+                <a href="/sessions/@session.Id/chat">Chat</a>
+                <a href="/sessions/@session.Id/logs">Logs</a>
+            </td>
         </tr>
     }
+    </tbody>
 </table>
 
 
