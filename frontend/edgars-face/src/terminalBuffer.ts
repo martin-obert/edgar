@@ -29,29 +29,26 @@ export function useTerminalBuffer(lineWidth: number = 50): TerminalOutputBuffer 
     function write(message: string) {
         if (message == null || message.length === 0) return
 
-        // Get the last line
-        const appendedLine = lines[lines.length - 1] ?? ''
-
-        if (appendedLine.length + message.length > lineWidth) {
+        if (lines.length === 0) {
             lines.push(message)
             triggerLength()
             triggerItems()
-            return
+            return;
         }
 
-        // Append word and check if the current line is overflowing
-        const multiLines = appendedLine + message
+        let currentLine = lines[lines.length - 1]!
 
-        if (lines.length === 0) {
-            lines.push(multiLines)
+        if(currentLine.length + message.length > lineWidth) {
+            lines.push(message)
             triggerLength()
             triggerItems()
-            return
+            return;
         }
 
-        const changedLine = multiLines
-        if (changedLine)
-            lines[lines.length - 1] = changedLine
+        lines[lines.length - 1] = currentLine + message
+        triggerLength()
+        return;
+
     }
 
     function clear() {
@@ -73,6 +70,7 @@ export function useTerminalBuffer(lineWidth: number = 50): TerminalOutputBuffer 
     })
 
     function pop() {
+        if(lines.length === 0) return undefined
         const result = lines.shift()
         triggerLength()
         triggerItems()

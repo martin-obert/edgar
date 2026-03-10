@@ -8,7 +8,7 @@ import {onKeyStroke} from "@vueuse/core";
 const {commands} = defineProps<{ commands: TerminalCommand[] }>()
 const messages = ref<TerminalMessage[]>([])
 const commandInput = ref<HTMLInputElement | null>(null)
-const messageStackSize = 5
+const messageStackSize = 15
 
 onMounted(() => {
   if (commandInput.value) {
@@ -61,8 +61,9 @@ const executeCommand = async (value: string) => {
 
 
 const popBuffer = () => {
-  if (outBuffer.length.value > 0) {
-    pushMessage({value: outBuffer.pop()!, type: 'out'})
+  const line = outBuffer.pop()
+  if (line) {
+    pushMessage({value: line, type: 'out'})
   }
 }
 
