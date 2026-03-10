@@ -1,11 +1,13 @@
 using System.Net.WebSockets;
 using System.Text.Json;
 using Edgar.Service;
+using Edgar.Service.Authentication;
 using Edgar.Service.Components;
 using Edgar.Service.Ollama;
 using Edgar.Service.Sessions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebSockets;
+using Microsoft.Extensions.Options;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -39,6 +41,13 @@ builder.Services.AddScoped<ISessionService, SessionService>();
 builder.Services.AddScoped<ISessionRepository, InMemorySessionRepository>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddCors();
+builder.Services.AddOptions<OllamaSettings>().BindConfiguration("Ollama").ValidateOnStart();
+builder.Services.AddHttpClient("Ollama", (sp, c) =>
+{
+    var config = sp.GetRequiredService<IOptions<OllamaSettings>>();
+    c.BaseAddress = new Uri(config.Value.BaseUrl);
+    config.Value.Authentication.EnrichHeaders(c.DefaultRequestHeaders);
+});
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();

@@ -21,7 +21,8 @@ public class SessionManager : IDisposable
         _logger = new LoggerConfiguration()
             .WriteTo.Logger(lc => lc
                 .WriteTo.File(combine,
-                    flushToDiskInterval: TimeSpan.FromSeconds(2)))
+                    flushToDiskInterval: TimeSpan.FromSeconds(2))).WriteTo
+            .Console(theme: Serilog.Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code)
             .CreateLogger();
         _llmService = provider.GetRequiredService<ILlmService>();
         _chatRepository = provider.GetRequiredService<IChatRepository>();
@@ -54,9 +55,9 @@ public class SessionManager : IDisposable
                 _logger.Information("Cancellation requested");
                 break;
             }
+
             try
             {
-
                 var segment = new ArraySegment<byte>(buffer);
                 _logger.Information("Waiting for message");
                 var result = await webSocket.ReceiveAsync(segment, cancellationToken);

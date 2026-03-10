@@ -4,17 +4,15 @@ using Edgar.Service.Ollama;
 
 namespace Edgar.Service.Sessions;
 
-public class LlmService(ILogger<LlmService> logger) : ILlmService
+public class LlmService(ILogger<LlmService> logger, IHttpClientFactory clientFactory) : ILlmService
 {
-    private readonly string _baseUrl = "https://ollama.obert.cz";
-
     public async Task GenerateResponseAsync(ChatMessageBag chatMessages,
         Action<OllamaResponseChunk> onChunkReceived,
         OllamaModelDefinition modelConfiguration,
         CancellationToken cancellationToken)
     {
-        using var httpClient = new HttpClient();
-        httpClient.BaseAddress = new Uri(_baseUrl);
+        var httpClient = clientFactory.CreateClient("Ollama");
+
         var jsonOptions = new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
@@ -28,15 +26,14 @@ public class LlmService(ILogger<LlmService> logger) : ILlmService
                 Role = KnownRoles.System,
                 Content = modelConfiguration.SystemPrompt,
                 CreatedAt = DateTime.UtcNow,
-            }), Model = modelConfiguration.Model,
+            }),
+            Model = modelConfiguration.Model,
             Options = modelConfiguration.Options,
             Stream = true,
             Tools = modelConfiguration.AllTools
         }, jsonOptions);
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "/api/chat");
         httpRequest.Content = new StringContent(json, Encoding.UTF8, "application/json");
-        httpRequest.Headers.Add("CF-Access-Client-ID", "<your-client-id-here>");
-        httpRequest.Headers.Add("CF-Access-Client-Secret", "<your-client-secret-here>");
         // Critical: ResponseHeadersRead starts streaming immediately
         // instead of buffering the entire response
         using var response = await httpClient.SendAsync(
@@ -55,11 +52,11 @@ public class LlmService(ILogger<LlmService> logger) : ILlmService
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                
+
                 logger.LogInformation("Processing chunk: {Chunk}", line);
-                
+
                 var chunk = JsonSerializer.Deserialize<OllamaResponseChunk>(line, jsonOptions);
-                
+
                 if (chunk is null)
                     throw new Exception("Chunk is null");
 

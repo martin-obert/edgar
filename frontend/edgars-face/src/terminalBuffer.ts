@@ -9,7 +9,7 @@ export interface TerminalOutputBuffer {
 }
 
 export function useTerminalBuffer(lineWidth: number = 50): TerminalOutputBuffer {
-    const array: string[] = []
+    const lines: string[] = []
     let triggerLength: () => void;
     let triggerItems: () => void;
 
@@ -18,53 +18,44 @@ export function useTerminalBuffer(lineWidth: number = 50): TerminalOutputBuffer 
         return {
             get() {
                 track();
-                return [...array];  // new reference each trigger
+                return [...lines];  // new reference each trigger
             },
             set() {
             },
         };
     });
 
-    function smartSplit(text: string, maxLen = 100) {
-        if (!text) return []
-        const lines = [];
-        let remaining = text;
 
-        while (remaining.length > maxLen) {
-            // Find the last space within the limit
-            let splitAt = remaining.lastIndexOf(' ', maxLen);
+    function write(message: string) {
+        if (message == null || message.length === 0) return
 
-            // If no space found, force split at maxLen
-            if (splitAt === -1) splitAt = maxLen;
+        // Get the last line
+        const appendedLine = lines[lines.length - 1] ?? ''
 
-            lines.push(remaining.slice(0, splitAt).trim());
-            remaining = remaining.slice(splitAt).trim();
-        }
-
-        if (remaining) lines.push(remaining);
-        return lines;
-    }
-
-    function write(message: string, options?: { append: boolean }) {
-        if (options?.append) {
-
-            const split = smartSplit(array[array.length - 1] + message, lineWidth)
-
-            array[array.length - 1] = split[0]!
-
-            if (split.length > 1) {
-                array.push(...split.slice(1))
-                triggerLength()
-            }
-        } else {
-            array.push(...smartSplit(message, lineWidth))
+        if (appendedLine.length + message.length > lineWidth) {
+            lines.push(message)
             triggerLength()
+            triggerItems()
+            return
         }
-        triggerItems()
+
+        // Append word and check if the current line is overflowing
+        const multiLines = appendedLine + message
+
+        if (lines.length === 0) {
+            lines.push(multiLines)
+            triggerLength()
+            triggerItems()
+            return
+        }
+
+        const changedLine = multiLines
+        if (changedLine)
+            lines[lines.length - 1] = changedLine
     }
 
     function clear() {
-        array.splice(0, array.length)
+        lines.splice(0, lines.length)
         triggerLength()
         triggerItems()
     }
@@ -74,7 +65,7 @@ export function useTerminalBuffer(lineWidth: number = 50): TerminalOutputBuffer 
         return {
             get() {
                 track();
-                return array.length;
+                return lines.length;
             },
             set() { /* read-only */
             },
@@ -82,7 +73,7 @@ export function useTerminalBuffer(lineWidth: number = 50): TerminalOutputBuffer 
     })
 
     function pop() {
-        const result = array.shift()
+        const result = lines.shift()
         triggerLength()
         triggerItems()
         return result

@@ -141,7 +141,9 @@ export interface IMessageManager {
     get activeRequestId(): string | undefined;
 
     dispose(): void;
-    sendToolResponse(content: string, toolCallId: string, promptId: string ): void
+
+    sendToolResponse(content: string, toolCallId: string, promptId: string): void
+
     sendPromptRequest(content: string, options: {
         onResponse: (response: WsResponseChunk) => void
     }): WsRequest;
@@ -183,7 +185,7 @@ class MessageManager implements IMessageManager {
     }
 
 
-    sendToolResponse(content: string, toolCallId: string, promptId: string ) {
+    sendToolResponse(content: string, toolCallId: string, promptId: string) {
         if (!this._messageStream.canWrite) {
             throw new MessageManagerError("Message stream is not writable", 'STREAM_NOT_WRITABLE')
         }
@@ -252,7 +254,6 @@ class MessageManager implements IMessageManager {
                 if (inMessage.isSignalRequestComplete) {
                     this._activeRequestId = undefined
                 }
-
                 switch (inMessage.role) {
                     case KnownRoles.assistant:
                         if (this._currentPrompt) {
