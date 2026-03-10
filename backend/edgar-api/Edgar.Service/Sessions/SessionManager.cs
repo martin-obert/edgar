@@ -21,6 +21,7 @@ public class SessionManager : IDisposable
         _logger = new LoggerConfiguration()
             .WriteTo.Logger(lc => lc
                 .WriteTo.File(combine,
+                    shared: true,  // allows other processes to read while Serilog writes
                     flushToDiskInterval: TimeSpan.FromSeconds(2))).WriteTo
             .Console(theme: Serilog.Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code)
             .CreateLogger();
@@ -92,6 +93,8 @@ public class SessionManager : IDisposable
             }
             catch (Exception e)
             {
+                if(webSocket.State == WebSocketState.Open)
+                    await webSocket.CloseAsync(WebSocketCloseStatus.InternalServerError, "Internal server error", cancellationToken);
                 _logger.Error(e, "Error in receive loop");
             }
         }

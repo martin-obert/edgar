@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.WebSockets;
 using Microsoft.Extensions.Options;
 using Serilog;
 
+
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
@@ -26,7 +27,6 @@ builder.Host.UseSerilog((ctx, cfg) =>
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 var wsSettings = builder.Configuration.GetSection("WebSockets").Get<WebSocketSettings>() ??
                  throw new Exception("WebSockets settings not found");
-
 // builder.Services.AddOpenApi();
 builder.Services.AddWebSockets(c =>
 {
@@ -36,6 +36,7 @@ builder.Services.AddWebSockets(c =>
         c.AllowedOrigins.Add(origin);
 });
 builder.Services.AddScoped<IChatRepository, ChatRepository>();
+builder.Services.AddScoped<ISessionLogRepository, SessionLogRepository>();
 builder.Services.AddScoped<ILlmService, LlmService>();
 builder.Services.AddScoped<ISessionService, SessionService>();
 builder.Services.AddScoped<ISessionRepository, InMemorySessionRepository>();
@@ -60,6 +61,7 @@ if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
 }
+
 app.UseSerilogRequestLogging(opts =>
 {
     opts.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>
@@ -97,7 +99,7 @@ app.MapGet("/ws", async (
 
             // TODO: switch to begin/end session
             var session = await sessionService.GetSessionByIdAsync(sessionId, cancellationToken) ??
-                          await sessionService.CreateSessionAsync(cancellationToken);
+                          await sessionService.CreateSessionAsync(sessionId, cancellationToken);
             await sessionService.SetSessionStateAsync(sessionId, SessionState.Connected, cancellationToken);
 
             logger.LogInformation("Starting session {SessionId}", session.Id);
@@ -139,7 +141,8 @@ sessionsGroup.MapDelete("{sessionId:guid}/end",
     });
 
 sessionsGroup.MapPut("{sessionId:guid}/configuration",
-    async ([FromRoute(Name = "sessionId")] Guid sessionId, [FromBody] OllamaModelDefinition configuration, [FromServices] ISessionService sessionService,
+    async ([FromRoute(Name = "sessionId")] Guid sessionId, [FromBody] OllamaModelDefinition configuration,
+        [FromServices] ISessionService sessionService,
         CancellationToken token = default) =>
     {
         await sessionService.UpdateSessionDefinitionAsync(sessionId, configuration, token);

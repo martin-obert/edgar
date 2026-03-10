@@ -15,6 +15,7 @@ public sealed class ChatLog : IChatLog
         _logger = new LoggerConfiguration()
             .WriteTo.Logger(lc => lc
                 .WriteTo.File(combine,
+                    shared: true,  // allows other processes to read while Serilog writes
                     outputTemplate: "{Message:lj}{NewLine}",
                     flushToDiskInterval: TimeSpan.FromSeconds(2)))
             .CreateLogger();
