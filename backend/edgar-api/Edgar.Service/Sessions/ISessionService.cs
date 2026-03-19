@@ -12,10 +12,10 @@ public interface ISessionService
     Task UpdateSessionDefinitionAsync(Guid sessionId, OllamaModelDefinition configuration, CancellationToken token);
 }
 
-public class SessionService(ISessionRepository sessionRepository) : ISessionService
+public class SessionService(ISessionRepository sessionRepository, IOllamaModelDefinitionProvider modelDefinitionProvider) : ISessionService
 {
     public async Task<Session> CreateSessionAsync(CancellationToken cancellationToken)
-    { 
+    {
         var sessionId = Guid.NewGuid();
         return await CreateSessionAsync(sessionId, cancellationToken);
     }
@@ -25,11 +25,12 @@ public class SessionService(ISessionRepository sessionRepository) : ISessionServ
         var existingSession = await sessionRepository.GetByIdAsync(sessionId, cancellationToken);
         if (existingSession != null)
             return existingSession;
-        
+
+        var configuration = await modelDefinitionProvider.GetDefaultModelDefinitionAsync(cancellationToken);
         var session = new Session
         {
-            Id =sessionId,
-            ModelConfiguration = OllamaDefinitions.DefaultModel,
+            Id = sessionId,
+            ModelConfiguration = configuration,
             CreatedAt = DateTime.UtcNow,
             State = SessionState.Created
         };

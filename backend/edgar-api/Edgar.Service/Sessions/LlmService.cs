@@ -4,11 +4,14 @@ using Edgar.Service.Ollama;
 
 namespace Edgar.Service.Sessions;
 
-public class LlmService(ILogger<LlmService> logger, IHttpClientFactory clientFactory) : ILlmService
+public class LlmService(
+    ILogger<LlmService> logger,
+    IHttpClientFactory clientFactory) : ILlmService
 {
     public async Task GenerateResponseAsync(ChatMessageBag chatMessages,
-        Action<OllamaResponseChunk> onChunkReceived,
+        MessageOptions messageOptions,
         OllamaModelDefinition modelConfiguration,
+        Action<OllamaResponseChunk> onChunkReceived,
         CancellationToken cancellationToken)
     {
         var httpClient = clientFactory.CreateClient("Ollama");
@@ -18,6 +21,7 @@ public class LlmService(ILogger<LlmService> logger, IHttpClientFactory clientFac
             PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
             WriteIndented = true
         };
+
 
         var json = JsonSerializer.Serialize(new OllamaChatRequest
         {
@@ -29,10 +33,12 @@ public class LlmService(ILogger<LlmService> logger, IHttpClientFactory clientFac
             }),
             Model = modelConfiguration.Model,
             Options = modelConfiguration.Options,
-            Stream = true,
-            Tools = modelConfiguration.AllTools
+            Stream = messageOptions.Stream,
+            Think = messageOptions.Think,
+            KeepAlive = messageOptions.KeepAlive,
+            Tools = modelConfiguration.AllTools,
         }, jsonOptions);
-        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "/api/chat");
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "api/chat");
         httpRequest.Content = new StringContent(json, Encoding.UTF8, "application/json");
         // Critical: ResponseHeadersRead starts streaming immediately
         // instead of buffering the entire response
@@ -41,7 +47,11 @@ public class LlmService(ILogger<LlmService> logger, IHttpClientFactory clientFac
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken);
 
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode)
+        {
+            var bodyMessage = await response.Content.ReadAsStringAsync(cancellationToken);
+            throw new Exception($"Error generating response: {response.StatusCode} {bodyMessage}");
+        }
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var reader = new StreamReader(stream);

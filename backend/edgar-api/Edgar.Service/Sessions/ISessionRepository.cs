@@ -11,8 +11,8 @@ public interface ISessionRepository
     Task InsertOrUpdateAsync(Session session, CancellationToken cancellationToken);
     Task<Session[]> ListSessionsAsync();
 
-    Task UpdateSessionConfigurationAsync(Guid sessionId, OllamaModelDefinition cancellationToken,
-        CancellationToken token);
+    Task UpdateSessionConfigurationAsync(Guid sessionId, OllamaModelDefinition modelConfiguration,
+        CancellationToken cancellationToken);
 }
 
 public class InMemorySessionRepository : ISessionRepository
@@ -65,8 +65,8 @@ public class InMemorySessionRepository : ISessionRepository
         return Task.FromResult(_sessions.Values.ToArray());
     }
 
-    public Task UpdateSessionConfigurationAsync(Guid sessionId, OllamaModelDefinition cancellationToken,
-        CancellationToken token)
+    public Task UpdateSessionConfigurationAsync(Guid sessionId, OllamaModelDefinition modelConfiguration,
+        CancellationToken cancellationToken)
     {
         if (!_sessions.TryGetValue(sessionId, out var session))
         {
@@ -74,13 +74,13 @@ public class InMemorySessionRepository : ISessionRepository
             {
                 CreatedAt = DateTime.UtcNow,
                 Id = sessionId,
-                ModelConfiguration = cancellationToken,
+                ModelConfiguration = modelConfiguration,
                 State = SessionState.Created
             };
             return Task.CompletedTask;
         }
 
-        _sessions[sessionId].ModelConfiguration = cancellationToken;
+        _sessions[sessionId].ModelConfiguration = modelConfiguration;
         return Task.CompletedTask;
     }
 }

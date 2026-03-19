@@ -35,11 +35,12 @@ builder.Services.AddWebSockets(c =>
     foreach (var origin in wsSettings.AllowedOrigins)
         c.AllowedOrigins.Add(origin);
 });
-builder.Services.AddScoped<IChatRepository, ChatRepository>();
+builder.Services.AddSingleton<IOllamaModelDefinitionProvider, OllamaModelDefinitionProvider>();
+builder.Services.AddSingleton<IChatRepository, ChatRepository>();
 builder.Services.AddScoped<ISessionLogRepository, SessionLogRepository>();
 builder.Services.AddScoped<ILlmService, LlmService>();
 builder.Services.AddScoped<ISessionService, SessionService>();
-builder.Services.AddScoped<ISessionRepository, InMemorySessionRepository>();
+builder.Services.AddSingleton<ISessionRepository, InMemorySessionRepository>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddCors();
 builder.Services.AddOptions<OllamaSettings>().BindConfiguration("Ollama").ValidateOnStart();
@@ -74,7 +75,6 @@ app.UseSerilogRequestLogging(opts =>
     opts.MessageTemplate =
         "HTTP {RequestMethod} {RequestPath} responded {StatusCode} in {Elapsed:0.0}ms";
 });
-
 app.MapGet("/ws", async (
         [FromQuery(Name = "session_id")] Guid sessionId,
         [FromServices] IHttpContextAccessor contextAccessor,
@@ -125,29 +125,16 @@ app.MapGet("/ws", async (
 
 var api = app.MapGroup("api/v1");
 var sessionsGroup = api.MapGroup("sessions");
-sessionsGroup.MapPost("begin",
-    async ([FromServices] ISessionService sessionService, CancellationToken cancellationToken = default) =>
-    {
-        var session = await sessionService.CreateSessionAsync(cancellationToken);
-        return Results.Created($"/api/v1/sessions/{session.Id}", session);
-    });
-
-sessionsGroup.MapDelete("{sessionId:guid}/end",
-    async ([FromRoute(Name = "sessionId")] Guid sessionId, [FromServices] ISessionService sessionService,
-        CancellationToken token = default) =>
-    {
-        await sessionService.DeleteSessionAsync(sessionId, token);
-        return Results.NoContent();
-    });
 
 sessionsGroup.MapPut("{sessionId:guid}/configuration",
-    async ([FromRoute(Name = "sessionId")] Guid sessionId, [FromBody] OllamaModelDefinition configuration,
+    async ([FromRoute(Name = "sessionId")] Guid sessionId, [FromBody] OllamaModelDefinition modelDefinition,
         [FromServices] ISessionService sessionService,
         CancellationToken token = default) =>
     {
-        await sessionService.UpdateSessionDefinitionAsync(sessionId, configuration, token);
-        return Results.Ok(configuration);
+        await sessionService.UpdateSessionDefinitionAsync(sessionId, modelDefinition, token);
+        return Results.NoContent();
     });
+;
 
 sessionsGroup.MapGet("{sessionId:guid}",
         async ([FromServices] ISessionService sessionService,

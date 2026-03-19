@@ -1,6 +1,5 @@
 ﻿using System.Net.WebSockets;
 using System.Text;
-using Edgar.Service.Ollama;
 using Serilog;
 using ILogger = Serilog.ILogger;
 
@@ -11,6 +10,7 @@ public class SessionManager : IDisposable
     private readonly ILogger _logger;
     private readonly ILlmService _llmService;
     private readonly IChatRepository _chatRepository;
+    private readonly IOllamaModelDefinitionProvider _definitionProvider;
     private readonly Session _session;
 
     public SessionManager(Session session, IServiceProvider provider)
@@ -21,12 +21,14 @@ public class SessionManager : IDisposable
         _logger = new LoggerConfiguration()
             .WriteTo.Logger(lc => lc
                 .WriteTo.File(combine,
-                    shared: true,  // allows other processes to read while Serilog writes
-                    flushToDiskInterval: TimeSpan.FromSeconds(2))).WriteTo
+                    shared: true, // allows other processes to read while Serilog writes
+                    flushToDiskInterval: TimeSpan.FromSeconds(2)))
+            .WriteTo
             .Console(theme: Serilog.Sinks.SystemConsole.Themes.AnsiConsoleTheme.Code)
             .CreateLogger();
         _llmService = provider.GetRequiredService<ILlmService>();
         _chatRepository = provider.GetRequiredService<IChatRepository>();
+        _definitionProvider = provider.GetRequiredService<IOllamaModelDefinitionProvider>();
     }
 
     public void Dispose()
@@ -45,8 +47,7 @@ public class SessionManager : IDisposable
         var chat = _chatRepository.GetMessagesForSession(_session.Id);
 
         var messageHandler = new MessageHandler(
-            new WebSocketMessageStreamWriter(webSocket, _logger), _llmService,
-            _session.ModelConfiguration ?? OllamaDefinitions.DefaultModel, chat, _logger);
+            new WebSocketMessageStreamWriter(webSocket, _logger), _llmService, chat, _logger);
         var buffer = new byte[1024 * 4];
         using var memoryStream = new MemoryStream();
         while (webSocket.State == WebSocketState.Open)
@@ -88,13 +89,17 @@ public class SessionManager : IDisposable
 
                     if (receivedMessage is null) throw new Exception("Received message is null");
 
-                    messageHandler.HandleMessage(receivedMessage, cancellationToken);
+                    var modelConfiguration =
+                        await _definitionProvider.GetSessionModelDefinitionAsync(_session.Id, cancellationToken);
+
+                    messageHandler.HandleMessage(receivedMessage, modelConfiguration, cancellationToken);
                 }
             }
             catch (Exception e)
             {
-                if(webSocket.State == WebSocketState.Open)
-                    await webSocket.CloseAsync(WebSocketCloseStatus.InternalServerError, "Internal server error", cancellationToken);
+                if (webSocket.State == WebSocketState.Open)
+                    await webSocket.CloseAsync(WebSocketCloseStatus.InternalServerError, "Internal server error",
+                        cancellationToken);
                 _logger.Error(e, "Error in receive loop");
             }
         }

@@ -7,13 +7,13 @@ namespace Edgar.Service.Sessions;
 public class MessageHandler(
     IMessageStreamWriter messageStreamWriter,
     ILlmService llmService,
-    OllamaModelDefinition modelConfiguration,
     ChatMessageBag messages,
     ILogger logger)
 {
     private class PromptProgress
     {
         public List<OllamaToolCallRequest> ToolCalls { get; } = new();
+        public required MessageOptions MessageOptions { get; init; }
         public StringBuilder Content = new();
         public StringBuilder Thinking = new();
         public bool ChunksComplete = false;
@@ -45,9 +45,12 @@ public class MessageHandler(
     /// Non-blocking message handler allows continuous processing of messages
     /// </summary>
     /// <param name="receivedMessage"></param>
+    /// <param name="modelConfiguration"></param>
     /// <param name="cancellationToken"></param>
     /// <exception cref="Exception"></exception>
-    public void HandleMessage(MessageEnvelope receivedMessage, CancellationToken cancellationToken = default)
+    public void HandleMessage(MessageEnvelope receivedMessage,
+        OllamaModelDefinition modelConfiguration,
+        CancellationToken cancellationToken = default)
     {
         Task.Run(async () =>
         {
@@ -57,10 +60,10 @@ public class MessageHandler(
                 switch (receivedMessage.Role)
                 {
                     case KnownRoles.User:
-                        await HandleUserPrompt(receivedMessage, cancellationToken);
+                        await HandleUserPrompt(receivedMessage, modelConfiguration, cancellationToken);
                         break;
                     case KnownRoles.Tool:
-                        await HandleToolRoleMessage(receivedMessage, cancellationToken);
+                        await HandleToolRoleMessage(receivedMessage, modelConfiguration, cancellationToken);
                         break;
                     default:
                         throw new Exception($"Unexpected role: {receivedMessage.Role}");
@@ -74,6 +77,7 @@ public class MessageHandler(
     }
 
     private async Task HandleToolRoleMessage(MessageEnvelope receivedMessage,
+        OllamaModelDefinition modelConfiguration,
         CancellationToken cancellationToken = default)
     {
         if (_promptProgress is null)
@@ -118,10 +122,11 @@ public class MessageHandler(
             ToolName = pendingToolRequest.Function.Name,
             CreatedAt = DateTime.UtcNow,
         });
-        await GenerateAndProcessResponseAsync(receivedMessage, cancellationToken);
+        await GenerateAndProcessResponseAsync(receivedMessage, modelConfiguration, cancellationToken);
     }
 
-    private async Task HandleUserPrompt(MessageEnvelope receivedMessage, CancellationToken cancellationToken = default)
+    private async Task HandleUserPrompt(MessageEnvelope receivedMessage, OllamaModelDefinition modelConfiguration,
+        CancellationToken cancellationToken = default)
     {
         if (receivedMessage.Body == null)
             return;
@@ -132,11 +137,11 @@ public class MessageHandler(
             Content = receivedMessage.Body,
             CreatedAt = DateTime.UtcNow,
         });
-
-        await GenerateAndProcessResponseAsync(receivedMessage, cancellationToken);
+        await GenerateAndProcessResponseAsync(receivedMessage, modelConfiguration, cancellationToken);
     }
 
     private async Task GenerateAndProcessResponseAsync(MessageEnvelope receivedMessage,
+        OllamaModelDefinition modelConfiguration,
         CancellationToken cancellationToken)
     {
         //TODO: wrap this into separate class
@@ -150,7 +155,8 @@ public class MessageHandler(
 
         var chunkId = 0;
 
-        await llmService.GenerateResponseAsync(messages, OnChunkReceived, modelConfiguration,
+        await llmService.GenerateResponseAsync(messages, localProgress.MessageOptions, modelConfiguration,
+            OnChunkReceived,
             cancellationToken);
 
         var delayBudget = TimeSpan.FromSeconds(10);
@@ -163,8 +169,8 @@ public class MessageHandler(
 
         if (localProgress.ToolCalls.Any())
         {
-            await llmService.GenerateResponseAsync(messages, OnChunkReceived, modelConfiguration,
-                cancellationToken);
+            await llmService.GenerateResponseAsync(messages, localProgress.MessageOptions, modelConfiguration,
+                OnChunkReceived, cancellationToken);
         }
 
         if (localProgress.IsComplete)
@@ -192,7 +198,9 @@ public class MessageHandler(
                         Id = ollamaToolCall.Id,
                         // Type = ollamaToolCall.Type,
                     });
-                   messageStreamWriter.WriteAsync(MessageFactory.ToolCall(ollamaToolCall.Function, localProgress.PromptId, ollamaToolCall.Id), cancellationToken);
+                    messageStreamWriter.WriteAsync(
+                        MessageFactory.ToolCall(ollamaToolCall.Function, localProgress.PromptId, ollamaToolCall.Id),
+                        cancellationToken);
                 }
 
             if (!string.IsNullOrWhiteSpace(obj.Message.Thinking))
@@ -223,6 +231,7 @@ public class MessageHandler(
                 _promptProgress = new PromptProgress
                 {
                     PromptId = receivedMessage.PromptId ?? Guid.NewGuid().ToString(),
+                    MessageOptions = MessageOptions.FromEnvelopeHeaders(receivedMessage),
                 };
                 return _promptProgress;
             }
@@ -236,6 +245,7 @@ public class MessageHandler(
             var subPrompt = new PromptProgress
             {
                 PromptId = _promptProgress.PromptId,
+                MessageOptions = _promptProgress.MessageOptions,
             };
             _promptProgress.SubPrompt = subPrompt;
             return subPrompt;

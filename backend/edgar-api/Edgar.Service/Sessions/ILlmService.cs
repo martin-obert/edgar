@@ -5,7 +5,8 @@ namespace Edgar.Service.Sessions;
 public interface ILlmService
 {
     Task GenerateResponseAsync(ChatMessageBag chatMessages,
-        Action<OllamaResponseChunk> onChunkReceived,
+        MessageOptions messageOptions,
         OllamaModelDefinition modelConfiguration,
+        Action<OllamaResponseChunk> onChunkReceived,
         CancellationToken cancellationToken);
 }

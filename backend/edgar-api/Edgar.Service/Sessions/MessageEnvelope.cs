@@ -10,4 +10,10 @@ public class MessageEnvelope
 
     public string? ToolCallId => Headers.FirstOrDefault(h => h.Name == KnownHeaders.ToolCallId)?.Value;
     public string? PromptId => Headers.FirstOrDefault(h => h.Name == KnownHeaders.PromptId)?.Value;
+
+    public string? Think => Headers.FirstOrDefault(h => h.Name == KnownHeaders.Think)?.Value;
+ 
+    public bool Stream => Headers.FirstOrDefault(h => h.Name == KnownHeaders.Stream)?.Value == "true";
+    
+    public string? KeepAlive => Headers.FirstOrDefault(h => h.Name == KnownHeaders.KeepAlive)?.Value; 
 }

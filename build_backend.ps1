@@ -1,0 +1,1 @@
+dotnet publish backend/edgar-api/Edgar.Service/Edgar.Service.csproj -c Development -o ./publish --self-contained -p:PublishSingleFile=true -r win-x64
