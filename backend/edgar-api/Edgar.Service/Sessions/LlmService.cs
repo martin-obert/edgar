@@ -8,7 +8,7 @@ public class LlmService(
     ILogger<LlmService> logger,
     IHttpClientFactory clientFactory) : ILlmService
 {
-    public async Task GenerateResponseAsync(ChatMessageBag chatMessages,
+    public async Task GenerateResponseAsync(IEnumerable<OllamaChatMessage> chatMessages,
         MessageOptions messageOptions,
         OllamaModelDefinition modelConfiguration,
         Action<OllamaResponseChunk> onChunkReceived,

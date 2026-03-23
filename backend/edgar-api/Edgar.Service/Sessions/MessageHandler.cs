@@ -4,43 +4,19 @@ using ILogger = Serilog.ILogger;
 
 namespace Edgar.Service.Sessions;
 
+public class PromptProgress
+{
+    public required string PromptId { get; init; }
+
+    public List<OllamaToolCallRequest> ToolCallRequests { get; } = [];
+}
+
 public class MessageHandler(
     IMessageStreamWriter messageStreamWriter,
     ILlmService llmService,
     ChatMessageBag messages,
     ILogger logger)
 {
-    private class PromptProgress
-    {
-        public List<OllamaToolCallRequest> ToolCalls { get; } = new();
-        public required MessageOptions MessageOptions { get; init; }
-        public StringBuilder Content = new();
-        public StringBuilder Thinking = new();
-        public bool ChunksComplete = false;
-
-        public bool IsComplete => ChunksComplete && ToolCalls.All(t => t.IsResolved) &&
-                                  (SubPrompt is null || SubPrompt.IsComplete);
-
-        public required string PromptId { get; init; }
-
-        public PromptProgress? SubPrompt { get; set; }
-
-        public OllamaChatMessage ToChatMessage()
-        {
-            return new OllamaChatMessage
-            {
-                Content = Content.ToString(),
-                ToolCalls = ToolCalls.Cast<OllamaToolCall>().ToArray(),
-                Thinking = Thinking.ToString(),
-                Role = KnownRoles.Assistant,
-                CreatedAt = DateTime.UtcNow,
-            };
-        }
-    }
-
-
-    private PromptProgress? _promptProgress;
-
     /// <summary>
     /// Non-blocking message handler allows continuous processing of messages
     /// </summary>
@@ -49,6 +25,7 @@ public class MessageHandler(
     /// <param name="cancellationToken"></param>
     /// <exception cref="Exception"></exception>
     public void HandleMessage(MessageEnvelope receivedMessage,
+        PromptProgress promptProgress,
         OllamaModelDefinition modelConfiguration,
         CancellationToken cancellationToken = default)
     {
@@ -60,10 +37,10 @@ public class MessageHandler(
                 switch (receivedMessage.Role)
                 {
                     case KnownRoles.User:
-                        await HandleUserPrompt(receivedMessage, modelConfiguration, cancellationToken);
+                        await HandleUserPrompt(promptProgress, receivedMessage, modelConfiguration, cancellationToken);
                         break;
                     case KnownRoles.Tool:
-                        await HandleToolRoleMessage(receivedMessage, modelConfiguration, cancellationToken);
+                        await HandleToolResponse(receivedMessage, promptProgress);
                         break;
                     default:
                         throw new Exception($"Unexpected role: {receivedMessage.Role}");
@@ -76,35 +53,28 @@ public class MessageHandler(
         }, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task HandleToolRoleMessage(MessageEnvelope receivedMessage,
-        OllamaModelDefinition modelConfiguration,
-        CancellationToken cancellationToken = default)
+    private Task HandleToolResponse(MessageEnvelope receivedMessage, PromptProgress promptProgress)
     {
-        if (_promptProgress is null)
-        {
-            logger.Warning("Tool call received, but no prompt is active");
-            return;
-        }
-
-        if (receivedMessage.PromptId != _promptProgress.PromptId)
+        if (receivedMessage.PromptId != promptProgress.PromptId)
         {
             logger.Warning("Tool call received, but prompt id does not match");
-            return;
+            return Task.CompletedTask;
         }
 
         if (string.IsNullOrWhiteSpace(receivedMessage.ToolCallId))
         {
             logger.Warning("Tool call received, but tool call id is null or empty");
-            return;
+            return Task.CompletedTask;
         }
 
-        var pendingToolRequest = _promptProgress.ToolCalls.FirstOrDefault(t => t.Id == receivedMessage.ToolCallId);
+        var pendingToolRequest =
+            promptProgress.ToolCallRequests.FirstOrDefault(t => t.Id == receivedMessage.ToolCallId);
 
         if (pendingToolRequest is null)
         {
             logger.Warning("Tool call {ToolCallId} received, but no pending tool call found",
                 receivedMessage.ToolCallId);
-            return;
+            return Task.CompletedTask;
         }
 
         if (pendingToolRequest.IsResolved)
@@ -113,19 +83,14 @@ public class MessageHandler(
                 receivedMessage.ToolCallId);
         }
 
-        pendingToolRequest.IsResolved = true;
+        pendingToolRequest.Resolve(receivedMessage.Body);
+        ;
 
-        messages.Add(new OllamaChatMessage
-        {
-            Role = KnownRoles.Tool,
-            Content = receivedMessage.Body,
-            ToolName = pendingToolRequest.Function.Name,
-            CreatedAt = DateTime.UtcNow,
-        });
-        await GenerateAndProcessResponseAsync(receivedMessage, modelConfiguration, cancellationToken);
+        return Task.CompletedTask;
     }
 
-    private async Task HandleUserPrompt(MessageEnvelope receivedMessage, OllamaModelDefinition modelConfiguration,
+    private async Task HandleUserPrompt(PromptProgress promptProgress, MessageEnvelope receivedMessage,
+        OllamaModelDefinition modelConfiguration,
         CancellationToken cancellationToken = default)
     {
         if (receivedMessage.Body == null)
@@ -135,79 +100,84 @@ public class MessageHandler(
         {
             Role = KnownRoles.User,
             Content = receivedMessage.Body,
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow
         });
-        await GenerateAndProcessResponseAsync(receivedMessage, modelConfiguration, cancellationToken);
+        await GenerateAndProcessResponseAsync(promptProgress, modelConfiguration, true, cancellationToken);
     }
 
-    private async Task GenerateAndProcessResponseAsync(MessageEnvelope receivedMessage,
+    private async Task GenerateAndProcessResponseAsync(PromptProgress globalProgress,
         OllamaModelDefinition modelConfiguration,
-        CancellationToken cancellationToken)
+        bool isRoot, CancellationToken cancellationToken)
     {
-        //TODO: wrap this into separate class
-        var localProgress = UpdateMessageContext(receivedMessage);
-
-        if (localProgress is null)
-        {
-            logger.Warning("Prompt progress is null, ignoring message");
-            return;
-        }
-
         var chunkId = 0;
-
-        await llmService.GenerateResponseAsync(messages, localProgress.MessageOptions, modelConfiguration,
+        var chunksComplete = false;
+        var messageOptions = new MessageOptions
+        {
+            Stream = true,
+        };
+        StringBuilder content = new();
+        StringBuilder thinking = new();
+        await llmService.GenerateResponseAsync(messages.Messages, messageOptions, modelConfiguration,
             OnChunkReceived,
             cancellationToken);
 
-        var delayBudget = TimeSpan.FromSeconds(10);
-
-        while (!localProgress.IsComplete && delayBudget > TimeSpan.Zero)
+        while (!chunksComplete && !cancellationToken.IsCancellationRequested)
         {
-            delayBudget -= TimeSpan.FromMilliseconds(100);
             await Task.Delay(100, cancellationToken);
         }
 
-        if (localProgress.ToolCalls.Any())
+        // Add an assistant original response with tool call requests
+        var ollamaChatMessage = GetAssistantResponse();
+        messages.Add(ollamaChatMessage);
+
+        
+        while (!globalProgress.ToolCallRequests.All(t => t.IsResolved && !cancellationToken.IsCancellationRequested))
         {
-            await llmService.GenerateResponseAsync(messages, localProgress.MessageOptions, modelConfiguration,
-                OnChunkReceived, cancellationToken);
+            await Task.Delay(100, cancellationToken);
         }
 
-        if (localProgress.IsComplete)
+        // If we got any tool calls, add them to the chat log
+        if (globalProgress.ToolCallRequests.Count > 0)
         {
-            messages.Add(localProgress.ToChatMessage());
+            messages.AddMany(GetToolResponses());
+            globalProgress.ToolCallRequests.Clear();
+            
+            // TODO: The model can keep calling the same tool call multiple times. We need to handle this case.
+                // Recursively call this method to handle tool calls    
+                await GenerateAndProcessResponseAsync(globalProgress, modelConfiguration, false, cancellationToken);
         }
 
-        messageStreamWriter.WriteAsync(MessageFactory.SignalPromptComplete(localProgress.PromptId), cancellationToken);
-        _promptProgress = null;
+        if (isRoot)
+        {
+            messageStreamWriter.WriteAsync(MessageFactory.SignalPromptComplete(globalProgress.PromptId),
+                cancellationToken);
+        }
 
         return;
 
         void OnChunkReceived(OllamaResponseChunk obj)
         {
             chunkId++;
-            if (obj.Done)
-                localProgress.ChunksComplete = true;
 
             if (obj.Message.ToolCalls is not null)
                 foreach (var ollamaToolCall in obj.Message.ToolCalls)
                 {
-                    localProgress.ToolCalls.Add(new OllamaToolCallRequest
+                    globalProgress.ToolCallRequests.Add(new OllamaToolCallRequest
                     {
                         Function = ollamaToolCall.Function,
                         Id = ollamaToolCall.Id,
-                        // Type = ollamaToolCall.Type,
+                        ReceivedAt = DateTime.UtcNow,
                     });
                     messageStreamWriter.WriteAsync(
-                        MessageFactory.ToolCall(ollamaToolCall.Function, localProgress.PromptId, ollamaToolCall.Id),
+                        MessageFactory.ToolCall(ollamaToolCall.Function, globalProgress.PromptId, ollamaToolCall.Id),
                         cancellationToken);
                 }
 
             if (!string.IsNullOrWhiteSpace(obj.Message.Thinking))
             {
-                localProgress.Thinking.Append(obj.Message.Thinking);
+                thinking.Append(obj.Message.Thinking);
                 messageStreamWriter.WriteAsync(MessageFactory.ThinkingChunk(obj.Message.Thinking,
-                    localProgress.PromptId), cancellationToken);
+                    globalProgress.PromptId), cancellationToken);
             }
 
             if (!string.IsNullOrWhiteSpace(obj.Message.Content))
@@ -215,42 +185,40 @@ public class MessageHandler(
                 if (obj.Message.Role != KnownRoles.Assistant)
                     throw new Exception($"Unexpected role: {obj.Message.Role}");
 
-                localProgress.Content.Append(obj.Message.Content);
-                messageStreamWriter.WriteAsync(MessageFactory.ChunkResponse(obj.Message.Content, localProgress.PromptId,
+                content.Append(obj.Message.Content);
+                messageStreamWriter.WriteAsync(MessageFactory.ChunkResponse(obj.Message.Content, globalProgress.PromptId,
                     chunkId.ToString()), cancellationToken);
             }
-        }
-    }
 
-    private PromptProgress? UpdateMessageContext(MessageEnvelope receivedMessage)
-    {
-        if (_promptProgress == null)
-        {
-            if (receivedMessage.Role == KnownRoles.User)
-            {
-                _promptProgress = new PromptProgress
-                {
-                    PromptId = receivedMessage.PromptId ?? Guid.NewGuid().ToString(),
-                    MessageOptions = MessageOptions.FromEnvelopeHeaders(receivedMessage),
-                };
-                return _promptProgress;
-            }
-
-            logger.Warning("Tool call received, but no prompt is active");
-            return null;
+            if (obj.Done)
+                chunksComplete = true;
         }
 
-        if (receivedMessage.Role == KnownRoles.Tool)
+
+        OllamaChatMessage GetAssistantResponse()
         {
-            var subPrompt = new PromptProgress
+            return new OllamaChatMessage
             {
-                PromptId = _promptProgress.PromptId,
-                MessageOptions = _promptProgress.MessageOptions,
+                Content = content.ToString(),
+                ToolCalls = globalProgress.ToolCallRequests.Cast<OllamaToolCall>().ToArray(),
+                Thinking = thinking.ToString(),
+                Role = KnownRoles.Assistant,
+                CreatedAt = DateTime.UtcNow,
             };
-            _promptProgress.SubPrompt = subPrompt;
-            return subPrompt;
         }
 
-        return _promptProgress;
+        OllamaChatMessage[] GetToolResponses()
+        {
+            return globalProgress.ToolCallRequests
+                .Where(x => x.IsResolved)
+                .Select(t => new OllamaChatMessage
+                {
+                    Content = t.Response,
+                    ToolCalls = null,
+                    Thinking = null,
+                    Role = KnownRoles.Tool,
+                    CreatedAt = t.ReceivedAt,
+                }).ToArray();
+        }
     }
 }

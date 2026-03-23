@@ -1,4 +1,6 @@
-﻿namespace Edgar.Service.Ollama;
+﻿using System.Text.Json.Nodes;
+
+namespace Edgar.Service.Ollama;
 
 public class OllamaModelOptions
 {
@@ -10,4 +12,7 @@ public class OllamaModelOptions
     public int? NumCtx { get; set; }
     public string? Stop { get; set; }
     public float? MinP { get; set; }
+    public JsonValue Think { get; set; } = JsonValue.Create(false);
+    public bool Stream { get; set; } = true;
+    public string? KeepAlive { get; set; }
 }

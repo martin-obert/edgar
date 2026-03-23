@@ -49,6 +49,7 @@ public class SessionManager : IDisposable
         var messageHandler = new MessageHandler(
             new WebSocketMessageStreamWriter(webSocket, _logger), _llmService, chat, _logger);
         var buffer = new byte[1024 * 4];
+        PromptProgress? promptProgress = null;
         using var memoryStream = new MemoryStream();
         while (webSocket.State == WebSocketState.Open)
         {
@@ -92,7 +93,20 @@ public class SessionManager : IDisposable
                     var modelConfiguration =
                         await _definitionProvider.GetSessionModelDefinitionAsync(_session.Id, cancellationToken);
 
-                    messageHandler.HandleMessage(receivedMessage, modelConfiguration, cancellationToken);
+                    if (receivedMessage.Role == KnownRoles.User)
+                    {
+                        promptProgress = new PromptProgress
+                        {
+                            PromptId = receivedMessage.PromptId ?? Guid.NewGuid().ToString(),
+                        };
+                    }
+                    
+                    if (promptProgress is null)
+                    {
+                        throw new InvalidOperationException("Prompt progress cannot be null for user messages");
+                    }
+                    
+                    messageHandler.HandleMessage(receivedMessage, promptProgress, modelConfiguration, cancellationToken);
                 }
             }
             catch (Exception e)

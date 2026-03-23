@@ -93,14 +93,22 @@ app.MapGet("/ws", async (
             if (!contextAccessor.HttpContext.WebSockets.IsWebSocketRequest)
                 return Results.BadRequest();
 
+            if (sessionId == Guid.Empty)
+            {
+                logger.LogError("Session ID is empty, caller must provide a valid session ID");
+                return Results.BadRequest("Session ID must be provided by the caller");
+            }
+
             var ws = await contextAccessor.HttpContext.WebSockets.AcceptWebSocketAsync();
 
             logger.LogInformation("WebSockets connection accepted");
 
-            // TODO: switch to begin/end session
-            var session = await sessionService.GetSessionByIdAsync(sessionId, cancellationToken) ??
-                          await sessionService.CreateSessionAsync(sessionId, cancellationToken);
-            await sessionService.SetSessionStateAsync(sessionId, SessionState.Connected, cancellationToken);
+            var session = await sessionService.GetSessionByIdAsync(sessionId, cancellationToken);
+            if (session == null)
+            {
+                throw new Exception("Session not found");
+            }
+            await sessionService.UpdateSessionStateAsync(sessionId, SessionState.Connected, cancellationToken);
 
             logger.LogInformation("Starting session {SessionId}", session.Id);
 
@@ -116,7 +124,7 @@ app.MapGet("/ws", async (
         }
         finally
         {
-            await sessionService.SetSessionStateAsync(sessionId, SessionState.Disconnected, CancellationToken.None);
+            await sessionService.UpdateSessionStateAsync(sessionId, SessionState.Disconnected, CancellationToken.None);
         }
 
         return Results.Empty;
@@ -126,12 +134,12 @@ app.MapGet("/ws", async (
 var api = app.MapGroup("api/v1");
 var sessionsGroup = api.MapGroup("sessions");
 
-sessionsGroup.MapPut("{sessionId:guid}/configuration",
+sessionsGroup.MapPut("{sessionId:guid}/begin",
     async ([FromRoute(Name = "sessionId")] Guid sessionId, [FromBody] OllamaModelDefinition modelDefinition,
         [FromServices] ISessionService sessionService,
         CancellationToken token = default) =>
     {
-        await sessionService.UpdateSessionDefinitionAsync(sessionId, modelDefinition, token);
+        await sessionService.CreateOrUpdateSession(sessionId, modelDefinition, token);
         return Results.NoContent();
     });
 ;
